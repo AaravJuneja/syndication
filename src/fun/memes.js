@@ -52,6 +52,10 @@ module.exports = async function memes(client, message) {
     await send(client, message.channelId, "https://klipy.com/gifs/peter-griffin-dancing-2");
     return true;
   }
+  if (lower === "popcorn") {
+    await send(client, message.channelId, "https://tenor.com/view/he-so-smol-only-need-one-popcorn-plankton-he-so-small-gif-15019144217821414426");
+    return true;
+  }
   if (lower === config.commandPrefix + "sit man") {
     await send(client, message.channelId, "sit man");
     setTimeout(() => message.delete().catch(() => {}), 1000);
