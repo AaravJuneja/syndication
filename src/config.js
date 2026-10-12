@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 module.exports = {
-  domain: (process.env.DOMAIN || "https://squeakyfiddlepro.me").replace(/\/$/, ""),
+  domain: (process.env.DOMAIN || "https://go.squeakyfiddlepro.me").replace(/\/$/, ""),
   port: process.env.PORT || 5000,
   tursoUrl: process.env.TURSO_URL || "file:./syndication.db",
   tursoToken: process.env.TURSO_AUTH_TOKEN || "",

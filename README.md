@@ -65,4 +65,4 @@ bun start
 ```
 
 Point your domain at the host running this on `PORT` (default 5000) and
-every `https://squeakyfiddlepro.me/<short>` resolves.
+every `https://go.squeakyfiddlepro.me/<short>` resolves.
