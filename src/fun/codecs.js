@@ -514,6 +514,58 @@ function whatIs(text) {
     .map(([name]) => name);
 }
 
+async function doctor(message) {
+  const lines = [];
+  const bin = (name, args) =>
+    new Promise((resolve) => {
+      execFile(name, args || ["--version"], { timeout: 8000 }, (err, stdout) => {
+        resolve(err ? null : String(stdout || "").split("\n")[0].slice(0, 80));
+      });
+    });
+  lines.push("runtime: " + (typeof Bun !== "undefined" ? "bun " + Bun.version : process.version));
+  try {
+    const ping = message.client.ws.ping;
+    lines.push("discord ping: " + (ping >= 0 ? ping + "ms" : "n/a"));
+  } catch {}
+  try {
+    const { db } = require("../db");
+    await db.execute("SELECT 1");
+    lines.push("turso: ok");
+  } catch {
+    lines.push("turso: UNREACHABLE");
+  }
+  const config = require("../config");
+  try {
+    const st = fs.statSync(config.wordlist);
+    lines.push("wordlist: " + (st.size / 1048576).toFixed(0) + "MB");
+  } catch {
+    lines.push("wordlist: missing (" + config.wordlist + ")");
+  }
+  try {
+    fs.accessSync(config.dict, fs.constants.R_OK);
+    lines.push("dict: ok");
+  } catch {
+    lines.push("dict: missing");
+  }
+  for (const [label, prog, args] of [
+    ["ffmpeg", "ffmpeg", ["-version"]],
+    ["python3", "python3", ["--version"]],
+    ["exiftool", "exiftool", ["-ver"]],
+    ["steghide", "steghide", ["--version"]],
+    ["zbarimg", "zbarimg", ["--version"]],
+    ["convert", "convert", ["--version"]],
+    ["file", "file", ["--version"]],
+  ]) {
+    const v = await bin(prog, args);
+    lines.push(label + ": " + (v || "missing"));
+  }
+  const cv = await bin("python3", ["-c", "import cv2; print(cv2.__version__)"]);
+  lines.push("cv2: " + (cv || "missing"));
+  const np = await bin("python3", ["-c", "import numpy, matplotlib; print('ok')"]);
+  lines.push("numpy+matplotlib: " + (np || "missing"));
+  await message.channel.send(cut(lines.join("\n")));
+}
+
 const HELP_FIELDS = [
   ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` — `ts <codec> encode|decode <text>`"],
   ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
@@ -525,6 +577,7 @@ const HELP_FIELDS = [
   ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` — pass a URL"],
   ["Audio", "`dtmf` `amorse` `spectro` — pass an audio URL"],
   ["OSINT", "`ghuser` `ghemail` `ghemails` `ghkeys` `weather` `ip` `user` `userscan` `backlink`"],
+  ["Doctor", "`doctor` — host capability report (binaries, db, latency)"],
   ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
   ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion` — or teach some: `baller add \"x\" \"y\"`"],
 ];
@@ -767,6 +820,10 @@ module.exports = async function codecs(client, message) {
     const crib = cribBit ? cribBit.slice(5) : "";
     const text = parts.filter((t) => t !== cribBit).join(" ");
     await auto(message, text, crib);
+    return true;
+  }
+  if (lower === p + "doctor") {
+    await doctor(message);
     return true;
   }
   if (lower === p + "help") {
