@@ -358,6 +358,12 @@ function trialFactor(n) {
   return out;
 }
 
+function egcdW(a, b) {
+  if (b === 0n) return [a, 1n, 0n];
+  const [g, x, y] = egcdW(b, a % b);
+  return [g, y, x - (a / b) * y];
+}
+
 async function handleSlash(interaction, env) {
   const name = ((interaction.data || {}).name || "").toLowerCase();
   const get = (n) => opt(interaction, n);
@@ -558,7 +564,7 @@ async function handleSlash(interaction, env) {
       ["ulid", /^[0-9A-HJKMNP-TV-Z]{26}$/], ["latlon", /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/],
       ["pem-key", /-----BEGIN (RSA )?PRIVATE KEY-----/], ["ssh-key", /^ssh-(rsa|ed25519)/],
     ];
-    const hits = rules.filter(([, re]) => re.test(t)).map(([n]) => n);
+    const hits = rules.filter((r) => r[1] instanceof RegExp && r[1].test(t)).map((r) => String(r[0]));
     return slashReply(hits.length ? hits.join(" / ") : "no idea what that is");
   }
   if (name === "braille" || name === "tap") {
@@ -780,7 +786,7 @@ async function handleSlash(interaction, env) {
     const e = parseBigW(get("e"));
     const n = parseBigW(get("n"));
     if (e === null || n === null) return slashReply("need e and n");
-    const isqrt = (v) => {
+    const isqrt = (v = 0n) => {
       if (v < 0n) return null;
       if (v < 2n) return v;
       let x = v;
@@ -836,23 +842,24 @@ async function handleSlash(interaction, env) {
       rems.push(c);
       mods.push(n);
     }
-    const eg2 = (a, b) => (b === 0n ? [a, 1n, 0n] : (() => { const [g, x, y] = eg2(b, a % b); return [g, y, x - (a / b) * y]; })());
     let M = 1n;
     for (const m of mods) M *= m;
-    let x = 0n;
+    let acc = 0n;
     for (let i = 0; i < rems.length; i++) {
       const Mi = M / mods[i];
-      const [g, inv] = eg2(Mi % mods[i], mods[i]);
-      if (g !== 1n) return slashReply("moduli not coprime");
-      x = (x + rems[i] * Mi * (((inv % mods[i]) + mods[i]) % mods[i])) % M;
+      const gg = egcdW(BigInt(Mi % mods[i]), BigInt(mods[i]));
+      if (gg[0] !== 1n) return slashReply("moduli not coprime");
+      const tA = BigInt(rems[i]) * BigInt(Mi);
+      const tF = (((BigInt(gg[1]) % BigInt(mods[i])) + BigInt(mods[i])) % BigInt(mods[i]));
+      acc = (BigInt(acc) + tA * tF) % BigInt(M);
     }
-    let r = x < 2n ? x : x;
-    let y = (2n * r + x / (r * r)) / 3n;
+    let r = acc < 2n ? acc : acc;
+    let y = (2n * r + acc / (r * r)) / 3n;
     while (y < r) {
       r = y;
-      y = (2n * r + x / (r * r)) / 3n;
+      y = (2n * r + acc / (r * r)) / 3n;
     }
-    if (r * r * r !== x) return slashReply("no exact cube root");
+    if (r * r * r !== acc) return slashReply("no exact cube root");
     let hex = r.toString(16);
     if (hex.length % 2) hex = "0" + hex;
     let text = "";
@@ -864,7 +871,7 @@ async function handleSlash(interaction, env) {
   if (name === "fermat") {
     const n = parseBigW(get("n"));
     if (n === null || n < 2n) return slashReply("need n");
-    const isqrt2 = (v) => {
+    const isqrt2 = (v = 0n) => {
       if (v < 2n) return v;
       let x = v;
       let y = (x + 1n) >> 1n;
@@ -914,7 +921,7 @@ async function handleSlash(interaction, env) {
       ["Reddit", /^[a-z0-9]{6,7}$/, (x) => "https://www.reddit.com/comments/" + x],
       ["Vimeo", /^\d{8,10}$/, (x) => "https://vimeo.com/" + x],
     ];
-    const hits = rules.filter(([, re]) => re.test(id)).map(([n, , f]) => n + ": <" + f(id) + ">");
+    const hits = rules.filter((r) => r[1] instanceof RegExp && r[1].test(id)).map((r) => (typeof r[2] === "function" ? String(r[0]) + ": <" + r[2](id) + ">" : String(r[0])));
     if (/^https?:\/\//i.test(id)) {
       try {
         const res = await fetch(id, { signal: AbortSignal.timeout(8000) });

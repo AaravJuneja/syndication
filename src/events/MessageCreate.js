@@ -6,6 +6,10 @@ const codecs = require("../fun/codecs");
 const hunt = require("../fun/hunt");
 const audio = require("../fun/audio");
 const solve = require("../fun/solve");
+const squares = require("../fun/squares");
+const transpose = require("../fun/transpose");
+const bases = require("../fun/bases");
+const grids = require("../fun/grids");
 const steg = require("../fun/steg");
 const osint = require("../fun/osint");
 
@@ -22,6 +26,10 @@ module.exports = {
       () => hunt(m.client, m),
       () => audio(m.client, m),
       () => solve(m.client, m),
+      () => squares(m.client, m),
+      () => transpose(m.client, m),
+      () => bases(m.client, m),
+      () => grids(m.client, m),
       () => steg(m.client, m),
       () => osint(m.client, m),
     ];

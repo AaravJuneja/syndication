@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "bun src/index.js",
-    "dev": "bun --watch src/index.js"
+    "dev": "bun --watch src/index.js",
+    "check": "tsc --noEmit",
+    "test": "bun test"
   },
   "license": "ISC",
   "dependencies": {
@@ -16,5 +18,10 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "bun-types": "^1.4.3",
+    "typescript": "^7.0.2"
   }
 }

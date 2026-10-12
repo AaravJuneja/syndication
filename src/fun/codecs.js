@@ -414,6 +414,10 @@ async function auto(message, text, crib) {
   };
   push("base64", tryB64(t));
   push("hex", tryHex(t));
+  push("ascii85", require("./bases").a85decode(t));
+  if (/=[0-9A-Fa-f]{2}/.test(t)) push("quoted-printable", require("./bases").qpDecode(t));
+  if (/[\u{1F3F7}-\u{1F4F6}]/u.test(t)) push("base100", require("./bases").b100decode(t));
+  if (/^begin\s|\n[A-M`#]/m.test(t) || /^[A-M`#][ -`]{7,}/.test(t)) push("uu", require("./bases").uudecode(t));
   push("base32", b32decode(t));
   push("binary", tryBin(t));
   try {
@@ -504,14 +508,22 @@ const WHAT_RULES = [
   ["private key PEM", /-----BEGIN (RSA )?PRIVATE KEY-----/, 1],
   ["PGP message", /-----BEGIN PGP MESSAGE-----/, 1],
   ["SSH public key", /^ssh-(rsa|ed25519|ecdsa)[-a-z0-9]*\s+[A-Za-z0-9+/=]+(\s+\S+)?$/, 1],
+  ["ADFGVX cipher", /^[ADFGVX\s]{8,}$/, 4],
+  ["ADFGX cipher", /^[ADFGX\s]{8,}$/, 4],
+  ["base100 emoji", /[\u{1F3F7}-\u{1F4F6}]/u, 4],
+  ["quoted-printable", /=[0-9A-Fa-f]{2}/, 4],
+  ["uuencoded body", /^begin\s+\d{3}\s+\S+/m, 4],
+  ["ascii85 block", /^<~[!-uz\s]+~>$/, 4],
+  ["pigpen glyphs", /[┘┴└├□┤┌┬┐∨∧><·]/, 4],
+  ["whitespace code", /^[STLstl \t\n]{16,}$/, 5],
 ];
 
 function whatIs(text) {
   const t = (text || "").trim();
   if (!t) return [];
-  return WHAT_RULES.filter(([, re]) => re.test(t))
-    .sort((a, b) => a[2] - b[2])
-    .map(([name]) => name);
+  return WHAT_RULES.filter((r) => r[1] instanceof RegExp && r[1].test(t))
+    .sort((a, b) => Number(a[2]) - Number(b[2]))
+    .map((r) => String(r[0]));
 }
 
 async function doctor(message) {
@@ -570,6 +582,12 @@ const HELP_TOPICS = {
   codecs: ["codec", "encode", "decode", "b64", "hex", "url", "morse"],
   shifts: ["shift", "caesar", "rot", "atbash"],
   keyed: ["crypto", "cipher", "vig", "rail", "affine", "bacon", "ook"],
+  squares: ["playfair", "bifid", "trifid", "four", "twosquare"],
+  transpose: ["columnar", "scytale", "route", "adfgvx", "adfgx", "gronsfeld", "autokey", "beaufort", "porta"],
+  polyalpha: ["gronsfeld", "autokey", "beaufort", "porta"],
+  bases: ["base58", "base62", "ascii85", "base91", "base100", "uuencode", "quoted"],
+  esolangs: ["deadfish", "cow", "whitespace"],
+  grids: ["polybius", "pigpen", "keyboard", "rc4", "hill", "deadfish", "cow", "whitespace"],
   xor: ["xor"],
   identify: ["identify", "detect", "freq", "hash", "jwt", "auto", "what", "decon"],
   crackers: ["crack", "sub", "password", "rockyou"],
@@ -586,6 +604,12 @@ const HELP_FIELDS = [
   ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` — `ts <codec> encode|decode <text>`"],
   ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
   ["Keyed ciphers", "`vig encode|decode <key>` `rail` (all rails) `affine` `bacon` `a1z26` `ook`"],
+  ["Squares", "`playfair` `bifid [n=]` `trifid [n=]` `foursquare` `twosquare [vert]` — `encode|decode [k=KEY]`"],
+  ["Transposition", "`columnar k=KEY [pad]` `scytale n=` `route w=` `adfgvx|adfgx [sq=] [k=] [pad]`"],
+  ["Poly ciphers", "`gronsfeld k=digits` `autokey k=` `beaufort k= [german]` `porta k=` — `encode|decode`"],
+  ["Base codes", "`b58` `b62` `a85` `b91` `b100` `uu` `xx` `qp` — `encode|decode`"],
+  ["Grids & misc", "`polybius [k=] [colrow]` `pigpen` `kb right|left|up|down` `rc4 k= [drop=]` `hill k=a,b,c,d`"],
+  ["Esolangs", "`deadfish run|encode` `cow run [in=]` `ws encode|decode`"],
   ["XOR lab", "`xor <hex> <key>` `xorbrute` `xorcrack [crib=]` `xordrag <hex> <crib>` `dec` `enc`"],
   ["Identify", "`freq` `ic` `hashid` `jwt` `decon` `auto [crib=]` `what` — name that blob"],
   ["Crackers", "`sub` `vigcrack` `hash` `crack` (rockyou) — ranked guesses, you pick"],
@@ -598,7 +622,7 @@ const HELP_FIELDS = [
   ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` — or teach some: `baller add \"x\" \"y\"`"],
 ];
 
-const HELP_KEYS = ["codecs", "shifts", "keyed", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
+const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
 
 module.exports = async function codecs(client, message) {
   const p = config.commandPrefix;

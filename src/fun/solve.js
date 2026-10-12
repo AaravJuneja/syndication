@@ -489,7 +489,7 @@ function pollardRho(n) {
     let x = 2n;
     let y = 2n;
     let d = 1n;
-    const f = (v) => ((v * v) % n + c) % n;
+    const f = (v = 0n) => ((v * v) % n + c) % n;
     while (d === 1n) {
       x = f(x);
       y = f(f(y));
@@ -612,9 +612,10 @@ function fermatFactor(n, limit) {
 }
 
 function icbrt(n) {
+  n = BigInt(n);
   if (n < 0n) return null;
   if (n < 2n) return n;
-  let x = n;
+  let x = BigInt(n);
   let y = (2n * x + n / (x * x)) / 3n;
   while (y < x) {
     x = y;
@@ -631,7 +632,7 @@ function crt(rems, mods) {
     const Mi = M / mods[i];
     const inv = modInv(Mi % mods[i], mods[i]);
     if (inv === null) return null;
-    x = (x + rems[i] * Mi * inv) % M;
+    x = (x + BigInt(rems[i]) * Mi * BigInt(inv)) % M;
   }
   return { x, M };
 }
@@ -935,7 +936,7 @@ module.exports = async function solve(client, message) {
       return true;
     }
     const m = icbrt(combined.x);
-    if (m === null || m * m * m !== combined.x) {
+    if (m === null || BigInt(m) * BigInt(m) * BigInt(m) !== combined.x) {
       await message.channel.send("No exact cube root. Wrong pairing or padding?");
       return true;
     }
