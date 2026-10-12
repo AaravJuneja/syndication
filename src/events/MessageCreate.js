@@ -1,4 +1,5 @@
 const { Events } = require("discord.js");
+const { glow } = require("../fun/glow");
 const memes = require("../fun/memes");
 const links = require("../fun/links");
 const codecs = require("../fun/codecs");
@@ -12,43 +13,44 @@ module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
     if (message.author?.bot || !message.guild) return;
+    const m = glow(message);
     try {
-      if (await links(message.client, message)) return;
+      if (await links(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await codecs(message.client, message)) return;
+      if (await codecs(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await hunt(message.client, message)) return;
+      if (await hunt(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await audio(message.client, message)) return;
+      if (await audio(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await solve(message.client, message)) return;
+      if (await solve(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await steg(message.client, message)) return;
+      if (await steg(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      if (await osint(message.client, message)) return;
+      if (await osint(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
     try {
-      await memes(message.client, message);
+      await memes(m.client, m);
     } catch (err) {
       console.error(err);
     }

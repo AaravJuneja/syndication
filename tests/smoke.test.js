@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll } from "bun:test";
 process.env.TURSO_URL = "file:/tmp/syndication-test.db";
 
 const { initDb } = require("../src/db.js");
+const { glow } = require("../src/fun/glow.js");
 const codecs = require("../src/fun/codecs.js");
 const solve = require("../src/fun/solve.js");
 const hunt = require("../src/fun/hunt.js");
@@ -80,6 +81,40 @@ describe("solvers", () => {
   it("substitution top hits", async () => {
     await solve({}, msg("ts sub " + "gsv jfrxp yildm ulc".replace(/[a-z]/g, (c) => c)));
     expect(lastText().length).toBeGreaterThan(0);
+  });
+});
+
+describe("glow", () => {
+  const wrap = () => {
+    const sent = [];
+    const base = {
+      content: "x", channelId: "1", guild: { id: "g" },
+      author: { username: "t", id: "9" }, member: {},
+      channel: { send: async (c) => { sent.push(c); return {}; } },
+      delete: async () => "deleted", client: { id: "c" },
+    };
+    return { m: glow(base), sent };
+  };
+  it("short text passes through", async () => {
+    const { m, sent } = wrap();
+    await m.channel.send("short msg");
+    expect(sent[0]).toBe("short msg");
+  });
+  it("long plain text becomes embed", async () => {
+    const { m, sent } = wrap();
+    await m.channel.send("y".repeat(250));
+    expect(sent[0].embeds.length).toBe(1);
+    expect(sent[0].embeds[0].data.description.startsWith("```")).toBe(true);
+  });
+  it("long markdown passes through", async () => {
+    const { m, sent } = wrap();
+    await m.channel.send("**head**\n" + "z".repeat(300));
+    expect(typeof sent[0]).toBe("string");
+  });
+  it("methods still work", async () => {
+    const { m } = wrap();
+    expect(await m.delete()).toBe("deleted");
+    expect(m.client.id).toBe("c");
   });
 });
 
