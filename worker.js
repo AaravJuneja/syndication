@@ -57,7 +57,7 @@ const LANDING = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Syndication</title>
+<title>syndication</title>
 <link rel="icon" type="image/svg+xml" href="https://www.techsyndicate.us/tslogo.svg">
 <link rel="alternate icon" type="image/png" href="https://www.techsyndicate.us/tslogo.png">
 <style>

@@ -57,7 +57,7 @@ process.on("uncaughtException", (err) => {
   if (config.errorWebhook && typeof fetch === "function") {
     fetch(config.errorWebhook, {
       method: "post",
-      body: JSON.stringify({ content: "Syndication: " + (err.message || err) }),
+      body: JSON.stringify({ content: "syndication: " + (err.message || err) }),
       headers: { "Content-Type": "application/json" },
     }).catch(() => {});
   }

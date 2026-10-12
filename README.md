@@ -1,4 +1,4 @@
-# Syndication
+# syndication
 
 Link shortener + meme bot for **squeakyfiddlepro.me**, built for a small
 CTF team server.

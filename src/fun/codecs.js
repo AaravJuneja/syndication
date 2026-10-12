@@ -856,7 +856,7 @@ module.exports = async function codecs(client, message) {
         : HELP_FIELDS.filter((_, i) => (HELP_TOPICS[HELP_KEYS[i]] || []).some((k) => k.includes(topic) || topic.includes(k)));
     }
     const embed = new EmbedBuilder()
-      .setTitle(topic ? "ts help: " + topic : "Syndication — every command starts with `ts`")
+      .setTitle(topic ? "ts help: " + topic : "syndication — every command starts with `ts`")
       .setColor("#16e16e");
     if (!fields.length) {
       embed.setDescription("topics: " + HELP_FIELDS.map(([name]) => name.toLowerCase()).join(", "));
