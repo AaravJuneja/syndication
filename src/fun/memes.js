@@ -31,7 +31,7 @@ module.exports = async function memes(client, message) {
       "Ballers",
       all.rows.map((b) => ({ name: b.cause, value: b.effect }))
     );
-    return;
+    return true;
   }
 
   if (lower === "hee hee") {
@@ -42,20 +42,20 @@ module.exports = async function memes(client, message) {
         if (channel) await channel.send({ files: [AUDIO_FILE] });
       } catch {}
     }
-    return;
+    return true;
   }
   if (lower === "bhakas alert") {
     await send(client, message.channelId, "https://tenor.com/view/duck-twerk-gif-11813731934647759555");
-    return;
+    return true;
   }
   if (lower === "invalid opinion") {
     await send(client, message.channelId, "https://klipy.com/gifs/peter-griffin-dancing-2");
-    return;
+    return true;
   }
   if (lower === config.commandPrefix + "sit man") {
     await send(client, message.channelId, "sit man");
     setTimeout(() => message.delete().catch(() => {}), 1000);
-    return;
+    return true;
   }
 
   if (lower.includes("baller add")) {
@@ -74,7 +74,7 @@ module.exports = async function memes(client, message) {
     }
     const sent = await message.channel.send(q[0] + "\n" + q[1]).catch(() => null);
     if (sent) setTimeout(() => sent.delete().catch(() => {}), 1000);
-    return;
+    return true;
   }
   if (lower.includes("baller remove")) {
     const q = quotedParts(text);
@@ -84,18 +84,18 @@ module.exports = async function memes(client, message) {
     }
     await db.execute({ sql: "DELETE FROM ballers WHERE cause = ?", args: [q[0]] }).catch(() => {});
     await send(client, message.channelId, '"' + q[0] + '" has been slayed by ' + message.author.username + ".");
-    return;
+    return true;
   }
   if (lower.includes("baller reset")) {
     await db.execute("DELETE FROM ballers").catch(() => {});
     await send(client, message.channelId, "All meme triggers wiped by " + message.author.username + ".");
-    return;
+    return true;
   }
   if (lower.includes("baller say")) {
     const say = text.slice(lower.indexOf("say") + 3).trim();
     if (say) await send(client, message.channelId, say);
     await message.delete().catch(() => {});
-    return;
+    return true;
   }
 
   const hit = await db
@@ -103,5 +103,7 @@ module.exports = async function memes(client, message) {
     .catch(() => ({ rows: [] }));
   if (hit.rows.length) {
     await send(client, message.channelId, hit.rows[0].effect);
+    return true;
   }
+  return false;
 };

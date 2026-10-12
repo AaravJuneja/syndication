@@ -14,45 +14,32 @@ module.exports = {
   async execute(message) {
     if (message.author?.bot || !message.guild) return;
     const m = glow(message);
+    const runs = [
+      () => links(m.client, m),
+      () => codecs(m.client, m),
+      () => hunt(m.client, m),
+      () => audio(m.client, m),
+      () => solve(m.client, m),
+      () => steg(m.client, m),
+      () => osint(m.client, m),
+    ];
+    for (const run of runs) {
+      try {
+        if (await run()) return;
+      } catch (err) {
+        console.error(err);
+      }
+    }
     try {
-      if (await links(m.client, m)) return;
+      if (await memes(m.client, m)) return;
     } catch (err) {
       console.error(err);
     }
-    try {
-      if (await codecs(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      if (await hunt(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      if (await audio(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      if (await solve(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      if (await steg(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      if (await osint(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
-    }
-    try {
-      await memes(m.client, m);
-    } catch (err) {
-      console.error(err);
+    const prefix = require("../config").commandPrefix;
+    if (message.content.toLowerCase().startsWith(prefix.toLowerCase())) {
+      try {
+        await m.channel.send("unknown command — try `ts help`");
+      } catch {}
     }
   },
 };
