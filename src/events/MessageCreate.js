@@ -13,6 +13,8 @@ module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
     if (message.author?.bot) return;
+    const config = require("../config");
+    if (config.allowedUsers.length && !config.allowedUsers.includes(message.author.id)) return;
     const m = glow(message);
     const runs = [
       () => links(m.client, m),

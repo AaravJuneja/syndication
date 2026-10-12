@@ -13,6 +13,7 @@ module.exports = {
   dict: process.env.DICT || "/usr/share/dict/words",
   githubToken: process.env.GITHUB_TOKEN || "",
   appId: process.env.DISCORD_APP_ID || "0",
+  allowedUsers: (process.env.ALLOWED_USERS || "").split(",").map((s) => s.trim()).filter(Boolean),
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || "",
   errorWebhook: process.env.WEBHOOK || "",
 };
