@@ -12,7 +12,7 @@ const osint = require("../fun/osint");
 module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
-    if (message.author?.bot || !message.guild) return;
+    if (message.author?.bot) return;
     const m = glow(message);
     const runs = [
       () => links(m.client, m),
