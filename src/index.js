@@ -17,6 +17,10 @@ const client = new Client({
 
 client.on("ready", (c) => {
   console.log("Ready! Logged in as " + c.user.tag);
+  const { registerGuild } = require("./fun/register");
+  for (const [id] of c.guilds.cache) {
+    registerGuild(id).then((ok) => console.log("Slash sync " + id + ": " + (ok ? "ok" : "failed")));
+  }
 });
 
 const eventsPath = path.join(__dirname, "events");

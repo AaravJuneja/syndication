@@ -12,6 +12,7 @@ module.exports = {
   wordlist: process.env.WORDLIST || "/usr/share/wordlists/rockyou.txt",
   dict: process.env.DICT || "/usr/share/dict/words",
   githubToken: process.env.GITHUB_TOKEN || "",
+  appId: process.env.DISCORD_APP_ID || "1559110528004001833",
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || "",
   errorWebhook: process.env.WEBHOOK || "",
 };
