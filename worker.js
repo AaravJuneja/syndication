@@ -1,5 +1,8 @@
 const DB_HOST = "syndication-juneja.aws-ap-south-1.turso.io";
 const APP_PUBLIC_KEY = "b5fe3f8cead4fcea076f4299a740fdb323889e3f0c36234f5df2c4d889ebbf18";
+const ALLOWED_USERS = new Set(
+  "0,0,0".split(",")
+);
 
 function hexToBytes(h) {
   const out = new Uint8Array(h.length / 2);
@@ -1234,6 +1237,11 @@ export default {
           return Response.json({ type: 1 });
         }
         if (interaction.type === 2) {
+          const who = (interaction.member && interaction.member.user && interaction.member.user.id) ||
+            (interaction.user && interaction.user.id) || "";
+          if (ALLOWED_USERS.size && !ALLOWED_USERS.has(who)) {
+            return Response.json({ type: 4, data: { content: "not on the allowlist", flags: 64 } });
+          }
           return handleSlash(interaction, env);
         }
         return new Response("unhandled", { status: 400 });
