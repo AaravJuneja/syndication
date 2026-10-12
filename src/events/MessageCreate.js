@@ -12,6 +12,7 @@ const bases = require("../fun/bases");
 const grids = require("../fun/grids");
 const steg = require("../fun/steg");
 const osint = require("../fun/osint");
+const agent = require("../fun/agent");
 
 module.exports = {
   name: Events.MessageCreate,
@@ -32,6 +33,7 @@ module.exports = {
       () => grids(m.client, m),
       () => steg(m.client, m),
       () => osint(m.client, m),
+      () => agent(m.client, m),
     ];
     for (const run of runs) {
       try {

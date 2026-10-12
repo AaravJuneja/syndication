@@ -595,6 +595,7 @@ const HELP_TOPICS = {
   files: ["file", "web", "steg", "image", "png", "carve"],
   audio: ["audio", "sound", "dtmf", "morse", "spectro"],
   osint: ["osint", "user", "github", "weather", "ip", "backlink", "username"],
+  agent: ["agent", "ask", "analyze", "attachment"],
   doctor: ["doctor", "host", "status"],
   links: ["link", "short", "url"],
   memes: ["meme", "fun", "baller", "trigger", "hee"],
@@ -617,12 +618,13 @@ const HELP_FIELDS = [
   ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` — pass a URL"],
   ["Audio", "`dtmf` `amorse` `spectro` — pass an audio URL"],
   ["OSINT", "`ghuser` `ghemail` `ghemails` `ghkeys` `weather` `ip` `user` `userscan` `backlink`"],
+  ["Agent", "`agent <prompt>` + attach a file (or paste URL) — opencode session on it, 10m cap"],
   ["Doctor", "`doctor` — host capability report (binaries, db, latency)"],
   ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
   ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` — or teach some: `baller add \"x\" \"y\"`"],
 ];
 
-const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
+const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "agent", "doctor", "links", "memes"];
 
 module.exports = async function codecs(client, message) {
   const p = config.commandPrefix;
