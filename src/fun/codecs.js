@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
+const { EmbedBuilder } = require("discord.js");
 
 function cut(s) {
   s = String(s);
@@ -513,31 +514,20 @@ function whatIs(text) {
     .map(([name]) => name);
 }
 
-const HELP =
-  "**Solver Kit**\n" +
-  "`ts b64/!hex/!url/!bin/!morse/!b32/!html/!uni encode|decode <text>`\n" +
-  "`ts rot [n]` `ts rot47` `ts caesar` (all shifts) `ts atbash` `ts rev`\n" +
-  "`ts vig encode|decode <key> <text>` `ts rail <text>` (all rails)\n" +
-  "`ts xor <hex> <key|byte>` `ts xorbrute <hex>`\n" +
-  "`ts dec <codes>` `ts enc <text>` `ts freq <text>` `ts ic <text>`\n" +
-  "`ts hashid <hash>` `ts jwt <token>` `ts decon <text>` (every candidate)\n" +
-  "`ts auto <ciphertext> [crib=...]` (everything, ranked) `ts freq` `ts ic`\n" +
-  "`ts what <blob>` (identifier: hashes, keys, wallets, formats)\n" +
-  "`ts hash md5|sha1|sha224|sha256|sha384|sha512 <text>` `ts crack <hash>`\n" +
-  "`ts upper|!lower|!len <text>` `ts get <url>` `ts forensics <url>` `ts qr <url>`\n" +
-  "`ts backlink <id|url>` (52-rule service identifier)\n" +
-  "`ts dtmf|!amorse|!spectro <audio url>`\n" +
-  "`ts zw [text]` `ts braille/!tap encode|decode` `ts anagram` `ts phone` `ts bf`\n" +
-  "`ts web <url>` (headers/robots/comments/js) `ts user <name>` (20 sites)\n" +
-  "`ts jwt none {json}` `ts jwt crack <token>`\n" +
-  "`ts sub <cryptogram>` `ts vigcrack <text>` `ts affine <text>`\n" +
-  "`ts bacon encode|decode` `ts a1z26 <text>` `ts ook <code>` `ts b36 encode|decode`\n" +
-  "`ts factor <n>` `ts rsa <n> <e> <c>` `ts xorcrack <hex>`\n" +
-  "`ts wiener <e> <n>` `ts hastad <c:n>…` `ts fermat <n>` `ts factordb <n>`\n" +
-  "`ts xordrag <hex> <crib>` `ts saml <blob>`\n" +
-  "`ts png|ts lsb|ts carve <url>` `ts negate|ts flop|ts solar <url>`\n" +
-  "`ts ghuser|ts ghemail|ts ghemails|ts ghkeys <target>`\n" +
-  "`ts weather <city> [date]` `ts ip <ip|domain>` `ts userscan <name>` (327 sites)";
+const HELP_FIELDS = [
+  ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` — `ts <codec> encode|decode <text>`"],
+  ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
+  ["Keyed ciphers", "`vig encode|decode <key>` `rail` (all rails) `affine` `bacon` `a1z26` `ook`"],
+  ["XOR lab", "`xor <hex> <key>` `xorbrute` `xorcrack [crib=]` `xordrag <hex> <crib>` `dec` `enc`"],
+  ["Identify", "`freq` `ic` `hashid` `jwt` `decon` `auto [crib=]` `what` — name that blob"],
+  ["Crackers", "`sub` `vigcrack` `hash` `crack` (rockyou) — ranked guesses, you pick"],
+  ["RSA kit", "`factor` `rsa <n> <e> <c>` `wiener` `hastad <c:n>…` `fermat` `factordb` `saml`"],
+  ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` — pass a URL"],
+  ["Audio", "`dtmf` `amorse` `spectro` — pass an audio URL"],
+  ["OSINT", "`ghuser` `ghemail` `ghemails` `ghkeys` `weather` `ip` `user` `userscan` `backlink`"],
+  ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
+  ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion` — or teach some: `baller add \"x\" \"y\"`"],
+];
 
 module.exports = async function codecs(client, message) {
   const p = config.commandPrefix;
@@ -780,7 +770,9 @@ module.exports = async function codecs(client, message) {
     return true;
   }
   if (lower === p + "help") {
-    await message.channel.send(HELP);
+    const embed = new EmbedBuilder().setTitle("Syndication — every command starts with `ts`").setColor("#16e16e");
+    for (const [name, value] of HELP_FIELDS) embed.addFields({ name, value });
+    await message.channel.send({ embeds: [embed] });
     return true;
   }
   return false;
