@@ -1227,6 +1227,12 @@ export { handleSlash };
 
 export default {
   async fetch(request, env) {
+    const proto = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
+    if (proto === "http") {
+      const url = new URL(request.url);
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 301);
+    }
     if (request.method === "POST") {
       const url = new URL(request.url);
       if (url.pathname === "/interactions") {
