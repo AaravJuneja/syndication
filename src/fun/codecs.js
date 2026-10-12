@@ -566,6 +566,22 @@ async function doctor(message) {
   await message.channel.send(cut(lines.join("\n")));
 }
 
+const HELP_TOPICS = {
+  codecs: ["codec", "encode", "decode", "b64", "hex", "url", "morse"],
+  shifts: ["shift", "caesar", "rot", "atbash"],
+  keyed: ["crypto", "cipher", "vig", "rail", "affine", "bacon", "ook"],
+  xor: ["xor"],
+  identify: ["identify", "detect", "freq", "hash", "jwt", "auto", "what", "decon"],
+  crackers: ["crack", "sub", "password", "rockyou"],
+  rsa: ["rsa", "factor", "wiener", "prime"],
+  files: ["file", "web", "steg", "image", "png", "carve"],
+  audio: ["audio", "sound", "dtmf", "morse", "spectro"],
+  osint: ["osint", "user", "github", "weather", "ip", "backlink", "username"],
+  doctor: ["doctor", "host", "status"],
+  links: ["link", "short", "url"],
+  memes: ["meme", "fun", "baller", "trigger", "hee"],
+};
+
 const HELP_FIELDS = [
   ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` — `ts <codec> encode|decode <text>`"],
   ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
@@ -581,6 +597,8 @@ const HELP_FIELDS = [
   ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
   ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion` — or teach some: `baller add \"x\" \"y\"`"],
 ];
+
+const HELP_KEYS = ["codecs", "shifts", "keyed", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
 
 module.exports = async function codecs(client, message) {
   const p = config.commandPrefix;
@@ -826,9 +844,24 @@ module.exports = async function codecs(client, message) {
     await doctor(message);
     return true;
   }
-  if (lower === p + "help") {
-    const embed = new EmbedBuilder().setTitle("Syndication — every command starts with `ts`").setColor("#16e16e");
-    for (const [name, value] of HELP_FIELDS) embed.addFields({ name, value });
+  if (lower === p + "help" || lower.startsWith(p + "help ")) {
+    const topic = content.slice((p + "help").length).trim().toLowerCase();
+    let fields = HELP_FIELDS;
+    if (topic) {
+      const exact = HELP_FIELDS.filter(
+        ([name], i) => HELP_KEYS[i] === topic || name.toLowerCase() === topic || name.toLowerCase().startsWith(topic)
+      );
+      fields = exact.length
+        ? exact
+        : HELP_FIELDS.filter((_, i) => (HELP_TOPICS[HELP_KEYS[i]] || []).some((k) => k.includes(topic) || topic.includes(k)));
+    }
+    const embed = new EmbedBuilder()
+      .setTitle(topic ? "ts help: " + topic : "Syndication — every command starts with `ts`")
+      .setColor("#16e16e");
+    if (!fields.length) {
+      embed.setDescription("topics: " + HELP_FIELDS.map(([name]) => name.toLowerCase()).join(", "));
+    }
+    for (const [name, value] of fields) embed.addFields({ name, value });
     await message.channel.send({ embeds: [embed] });
     return true;
   }
