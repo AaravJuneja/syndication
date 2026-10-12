@@ -595,7 +595,7 @@ const HELP_FIELDS = [
   ["OSINT", "`ghuser` `ghemail` `ghemails` `ghkeys` `weather` `ip` `user` `userscan` `backlink`"],
   ["Doctor", "`doctor` — host capability report (binaries, db, latency)"],
   ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
-  ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion` — or teach some: `baller add \"x\" \"y\"`"],
+  ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` — or teach some: `baller add \"x\" \"y\"`"],
 ];
 
 const HELP_KEYS = ["codecs", "shifts", "keyed", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];

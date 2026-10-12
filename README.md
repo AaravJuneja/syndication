@@ -25,7 +25,7 @@ Discord (every command starts with `ts `):
 - `baller show` — paged embed of every trigger.
 - Any exact trigger message gets its response posted.
 - `hee hee` — replies `*hee hee*` (5% chance of the audio clip).
-- `bhakas alert`, `invalid opinion`, `ts sit man` — one-liners, everyone can use them.
+- `bhakas alert`, `invalid opinion`, `popcorn`, `ts sit man` — one-liners, everyone can use them.
 - Join welcome ping (only if `WELCOME_CHANNEL_ID` is set).
 - Uncaught exceptions are posted to `WEBHOOK` when set.
 
