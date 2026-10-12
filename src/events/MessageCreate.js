@@ -1,65 +1,56 @@
-const {
-  Events,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
-
-const row = new ActionRowBuilder().addComponents(
-  new ButtonBuilder()
-    .setCustomId("verify_button")
-    .setLabel("Verify Me!")
-    .setStyle(ButtonStyle.Success)
-);
+const { Events } = require("discord.js");
+const memes = require("../fun/memes");
+const links = require("../fun/links");
+const codecs = require("../fun/codecs");
+const hunt = require("../fun/hunt");
+const audio = require("../fun/audio");
+const solve = require("../fun/solve");
+const steg = require("../fun/steg");
+const osint = require("../fun/osint");
 
 module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
-    if (message.content.startsWith("!verify-members")) {
-      const unverified = message.guild.members.cache.filter(
-        (member) => !member.roles.cache.has("1056208744977023086")
-      );
-      unverified.forEach(async (member) => {
-        let verMsg = null;
-        if (member.user.bot) {
-          console.log("Found bot");
-          return;
-        }
-        try {
-          verMsg = await member.send({
-            content:
-              "Welcome to the Training Grounds Server! Please verify yourself by clicking the button below:",
-            components: [row],
-          });
-        } catch (err) {
-          message.guild.channels.cache
-            .get("1056208680313421954")
-            .send(
-              `Unable to send verification message to <@${member.user.id}> Please enable your privacy settings.`
-            );
-          return;
-        }
-
-        const filter = (interaction) =>
-          interaction.customId === "verify_button" &&
-          interaction.user.id === member.id;
-        const collector = verMsg.createMessageComponentCollector({
-          filter,
-          time: 1500000,
-        });
-        collector.on("collect", async (interaction) => {
-          try {
-            await member.roles.add("1056208744977023086");
-            interaction.reply({
-              content:
-                "You have been verified! Please select your events in the #tg-events channel.",
-              ephemeral: true,
-            });
-          } catch (err) {
-            console.error(err);
-          }
-        });
-      });
+    if (message.author?.bot || !message.guild) return;
+    try {
+      if (await links(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await codecs(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await hunt(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await audio(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await solve(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await steg(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      if (await osint(message.client, message)) return;
+    } catch (err) {
+      console.error(err);
+    }
+    try {
+      await memes(message.client, message);
+    } catch (err) {
+      console.error(err);
     }
   },
 };
