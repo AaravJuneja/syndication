@@ -72,7 +72,6 @@ const LANDING = `<!DOCTYPE html>
 <body>
 <div>
 <h1>syndi<span>cation</span></h1>
-<p>short links for the trio &middot; powered by a discord bot</p>
 <code>ts link add &lt;name&gt; &lt;short&gt; &lt;url&gt;</code>
 </div>
 </body>
