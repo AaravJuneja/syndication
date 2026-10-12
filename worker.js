@@ -58,6 +58,8 @@ const LANDING = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Syndication</title>
+<link rel="icon" type="image/svg+xml" href="https://www.techsyndicate.us/tslogo.svg">
+<link rel="alternate icon" type="image/png" href="https://www.techsyndicate.us/tslogo.png">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000; color: #eee; font-family: system-ui, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }

@@ -1,8 +1,7 @@
 # Syndication
 
-Link shortener + meme bot for **squeakyfiddlepro.me**, combined from
-Tech Syndicate's `tg-bot`, `intech-reg-24-backend` Discord bot, and
-`link-shorten` into one bot for a small CTF team server.
+Link shortener + meme bot for **squeakyfiddlepro.me**, built for a small
+CTF team server.
 
 ## What it does
 
