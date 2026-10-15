@@ -20,6 +20,16 @@ module.exports = {
     if (message.author?.bot) return;
     const config = require("../config");
     if (config.allowedUsers.length && !config.allowedUsers.includes(message.author.id)) return;
+    try {
+      const raw = message.content || "";
+      const low = raw.toLowerCase();
+      message._originalContent = raw;
+      if (low === "baller") {
+        message.content = config.commandPrefix.trim();
+      } else if (low.startsWith("baller ")) {
+        message.content = config.commandPrefix + raw.slice(7).trimStart();
+      }
+    } catch {}
     const m = glow(message);
     const runs = [
       () => links(m.client, m),
@@ -50,7 +60,7 @@ module.exports = {
     const prefix = require("../config").commandPrefix;
     if (message.content.toLowerCase().startsWith(prefix.toLowerCase())) {
       try {
-        await m.channel.send("unknown command — try `ts help`");
+        await m.channel.send("unknown command - try `ts help`");
       } catch {}
     }
   },

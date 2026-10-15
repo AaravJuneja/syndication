@@ -11,20 +11,20 @@ Short links (served from your domain):
 - Unknown slugs redirect to the domain homepage.
 - `GET /health` returns `ok` for uptime checks.
 
-Discord (every command starts with `ts `):
+Discord (every command starts with `ts `, `baller ` works as an alias):
 
-- `ts link add <name> <short> <url>` — create a short link.
-- `ts link remove <short>[,<short2>...]` — delete short link(s).
-- `ts link edit <short> <field> <new value>` — edit `name` or `link`.
-- `ts link show` — paged embed of every short link.
-- `ts link help` — usage.
-- `baller add "trigger" "response"` — teach an auto-reply.
-- `baller remove "trigger"` / `baller reset` — delete them.
-- `baller say <text>` — speak through the bot, trigger message deleted.
-- `baller show` — paged embed of every trigger.
+- `ts link add <name> <short> <url>` - create a short link.
+- `ts link remove <short>[,<short2>...]` - delete short link(s).
+- `ts link edit <short> <field> <new value>` - edit `name` or `link`.
+- `ts link show` - paged embed of every short link.
+- `ts link help` - usage.
+- `ts add "trigger" "response"` - teach an auto-reply.
+- `ts remove "trigger"` / `ts reset` - delete them.
+- `ts say <text>` - speak through the bot, trigger message deleted.
+- `ts show` - paged embed of every trigger.
 - Any exact trigger message gets its response posted.
-- `hee hee` — replies `*hee hee*` (5% chance of the audio clip).
-- `bhakas alert`, `invalid opinion`, `popcorn`, `ts sit man` — one-liners, everyone can use them.
+- `hee hee` - replies `*hee hee*` (5% chance of the audio clip).
+- `bhakas alert`, `invalid opinion`, `popcorn`, `ts sit man` - one-liners, everyone can use them.
 - Join welcome ping (only if `WELCOME_CHANNEL_ID` is set).
 - Uncaught exceptions are posted to `WEBHOOK` when set.
 
@@ -65,3 +65,4 @@ bun start
 
 Point your domain at the host running this on `PORT` (default 5000) and
 every `https://go.squeakyfiddlepro.me/<short>` resolves.
+

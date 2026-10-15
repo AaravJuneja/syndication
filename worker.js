@@ -547,7 +547,7 @@ async function handleSlash(interaction, env) {
       if (!list.length) return slashReply("nothing readable");
       return slashReply(list.slice(0, 6).map((f) => "[" + f[0] + "] " + f[1].slice(0, 200)).join("\n"));
     }
-    if (!found.length) return slashReply("no idea — try /auto");
+    if (!found.length) return slashReply("no idea - try /auto");
     return slashReply(found.map((f) => "[" + f[0] + "] " + f[1].slice(0, 300)).join("\n"));
   }
   if (name === "what") {
@@ -767,7 +767,7 @@ async function handleSlash(interaction, env) {
     if (n === null || e === null || c === null) return slashReply("need n, e, c");
     const facs = trialFactor(n);
     const uniq = [...new Set(facs)];
-    if (facs.length > 4 || uniq.length > 2 || facs.length === 1) return slashReply("small factors not found — try /factordb");
+    if (facs.length > 4 || uniq.length > 2 || facs.length === 1) return slashReply("small factors not found - try /factordb");
     const phi = uniq.length === 1 ? uniq[0] * (uniq[0] - 1n) : (uniq[0] - 1n) * (uniq[1] - 1n);
     const eg = (a, b) => (b === 0n ? [a, 1n, 0n] : (() => { const [g, x, y] = eg(b, a % b); return [g, y, x - (a / b) * y]; })());
     const [g, x] = eg(e, phi);
@@ -1223,10 +1223,10 @@ async function handleSlash(interaction, env) {
     if (name === "link-show") {
       const rows = await q("SELECT name, backlink, link FROM links ORDER BY rowid");
       if (!rows.length) return slashReply("no links yet");
-      return slashReply(rows.slice(0, 15).map(([n, s, l]) => n + " — https://go.squeakyfiddlepro.me/" + s).join("\n"));
+      return slashReply(rows.slice(0, 15).map(([n, s, l]) => n + " - https://go.squeakyfiddlepro.me/" + s).join("\n"));
     }
   }
-  return slashReply("unknown command — /help");
+  return slashReply("unknown command - /help");
 }
 
 export { handleSlash };

@@ -19,8 +19,14 @@ function quotedParts(text) {
 module.exports = async function memes(client, message) {
   const text = message.content || "";
   const lower = text.toLowerCase();
+  const p = config.commandPrefix.toLowerCase();
+  const isShow = lower === p + "show" || lower.startsWith(p + "show ");
+  const isAdd = lower === p + "add" || lower.startsWith(p + "add ");
+  const isRemove = lower === p + "remove" || lower.startsWith(p + "remove ");
+  const isReset = lower === p + "reset" || lower.startsWith(p + "reset ");
+  const isSay = lower === p + "say" || lower.startsWith(p + "say ");
 
-  if (lower.includes("baller show")) {
+  if (isShow) {
     const all = await db.execute("SELECT cause, effect FROM ballers ORDER BY rowid").catch(() => ({ rows: [] }));
     if (!all.rows.length) {
       await send(client, message.channelId, "no ballers found");
@@ -62,10 +68,10 @@ module.exports = async function memes(client, message) {
     return true;
   }
 
-  if (lower.includes("baller add")) {
+  if (isAdd) {
     const q = quotedParts(text);
     if (q.length < 2) {
-      await send(client, message.channelId, 'Usage: `baller add "trigger" "response"`');
+      await send(client, message.channelId, 'Usage: `ts add "trigger" "response"`');
       return;
     }
     const dup = await db
@@ -80,34 +86,39 @@ module.exports = async function memes(client, message) {
     if (sent) setTimeout(() => sent.delete().catch(() => {}), 1000);
     return true;
   }
-  if (lower.includes("baller remove")) {
+  if (isRemove) {
     const q = quotedParts(text);
     if (!q.length) {
-      await send(client, message.channelId, 'Usage: `baller remove "trigger"`');
+      await send(client, message.channelId, 'Usage: `ts remove "trigger"`');
       return;
     }
     await db.execute({ sql: "DELETE FROM ballers WHERE cause = ?", args: [q[0]] }).catch(() => {});
     await send(client, message.channelId, '"' + q[0] + '" has been slayed by ' + message.author.username + ".");
     return true;
   }
-  if (lower.includes("baller reset")) {
+  if (isReset) {
     await db.execute("DELETE FROM ballers").catch(() => {});
     await send(client, message.channelId, "All meme triggers wiped by " + message.author.username + ".");
     return true;
   }
-  if (lower.includes("baller say")) {
-    const say = text.slice(lower.indexOf("say") + 3).trim();
+  if (isSay) {
+    const say = text.slice((config.commandPrefix + "say").length).trim();
     if (say) await send(client, message.channelId, say);
     await message.delete().catch(() => {});
     return true;
   }
 
-  const hit = await db
-    .execute({ sql: "SELECT effect FROM ballers WHERE cause = ?", args: [text] })
-    .catch(() => ({ rows: [] }));
-  if (hit.rows.length) {
-    await send(client, message.channelId, hit.rows[0].effect);
-    return true;
+  const candidates = [text];
+  const orig = message._originalContent;
+  if (orig && orig !== text) candidates.push(orig);
+  for (const cand of candidates) {
+    const hit = await db
+      .execute({ sql: "SELECT effect FROM ballers WHERE cause = ?", args: [cand] })
+      .catch(() => ({ rows: [] }));
+    if (hit.rows.length) {
+      await send(client, message.channelId, hit.rows[0].effect);
+      return true;
+    }
   }
   return false;
 };

@@ -46,13 +46,13 @@ bun src/index.js
 - `ts help` → embed menu
 - `ts doctor` → capability report; expect on panel:
   - runtime, discord ping, turso: ok
-  - wordlist: missing (fine — `ts crack` needs WORDLIST, rockyou is 140MB)
+  - wordlist: missing (fine - `ts crack` needs WORDLIST, rockyou is 140MB)
   - ffmpeg/python3/cv2/exiftool/steghide: whatever panel has;
     missing ones degrade gracefully with honest messages
 
 ## 6. Cut over
 
-Tell me when `ts doctor` is green on the panel — I stop the local
+Tell me when `ts doctor` is green on the panel - I stop the local
 systemd service so two instances never fight over the gateway.
 
 ## Limits to know

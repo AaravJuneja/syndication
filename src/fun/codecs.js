@@ -601,26 +601,26 @@ const HELP_TOPICS = {
 };
 
 const HELP_FIELDS = [
-  ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` — `ts <codec> encode|decode <text>`"],
+  ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` - `ts <codec> encode|decode <text>`"],
   ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
   ["Keyed ciphers", "`vig encode|decode <key>` `rail` (all rails) `affine` `bacon` `a1z26` `ook`"],
-  ["Squares", "`playfair` `bifid [n=]` `trifid [n=]` `foursquare` `twosquare [vert]` — `encode|decode [k=KEY]`"],
+  ["Squares", "`playfair` `bifid [n=]` `trifid [n=]` `foursquare` `twosquare [vert]` - `encode|decode [k=KEY]`"],
   ["Transposition", "`columnar k=KEY [pad]` `scytale n=` `route w=` `adfgvx|adfgx [sq=] [k=] [pad]`"],
-  ["Poly ciphers", "`gronsfeld k=digits` `autokey k=` `beaufort k= [german]` `porta k=` — `encode|decode`"],
-  ["Base codes", "`b58` `b62` `a85` `b91` `b100` `uu` `xx` `qp` — `encode|decode`"],
+  ["Poly ciphers", "`gronsfeld k=digits` `autokey k=` `beaufort k= [german]` `porta k=` - `encode|decode`"],
+  ["Base codes", "`b58` `b62` `a85` `b91` `b100` `uu` `xx` `qp` - `encode|decode`"],
   ["Grids & misc", "`polybius [k=] [colrow]` `pigpen` `kb right|left|up|down` `rc4 k= [drop=]` `hill k=a,b,c,d`"],
   ["Esolangs", "`deadfish run|encode` `cow run [in=]` `ws encode|decode`"],
   ["XOR lab", "`xor <hex> <key>` `xorbrute` `xorcrack [crib=]` `xordrag <hex> <crib>` `dec` `enc`"],
-  ["Identify", "`freq` `ic` `hashid` `jwt` `decon` `auto [crib=]` `what` — name that blob"],
-  ["Crackers", "`sub` `vigcrack` `hash` `crack` (rockyou) — ranked guesses, you pick"],
+  ["Identify", "`freq` `ic` `hashid` `jwt` `decon` `auto [crib=]` `what` - name that blob"],
+  ["Crackers", "`sub` `vigcrack` `hash` `crack` (rockyou) - ranked guesses, you pick"],
   ["RSA kit", "`factor` `rsa <n> <e> <c>` `wiener` `hastad <c:n>…` `fermat` `factordb` `saml`"],
-  ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` — pass a URL"],
-  ["Audio", "`dtmf` `amorse` `spectro` — pass an audio URL"],
+  ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` - pass a URL"],
+  ["Audio", "`dtmf` `amorse` `spectro` - pass an audio URL"],
   ["OSINT", "`ghuser` `ghemail` `ghemails` `ghkeys` `weather` `ip` `user` `userscan` `backlink`"],
 
-  ["Doctor", "`doctor` — host capability report (binaries, db, latency)"],
-  ["Links", "`link add|remove|edit|show` — short URLs on your domain"],
-  ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` — or teach some: `baller add \"x\" \"y\"`"],
+  ["Doctor", "`doctor` - host capability report (binaries, db, latency)"],
+  ["Links", "`link add|remove|edit|show` - short URLs on your domain"],
+  ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` - or teach some: `ts add \"x\" \"y\"` (`ts show|remove|reset|say`, `baller ` is an alias of `ts `)"],
 ];
 
 const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
@@ -881,7 +881,7 @@ module.exports = async function codecs(client, message) {
         : HELP_FIELDS.filter((_, i) => (HELP_TOPICS[HELP_KEYS[i]] || []).some((k) => k.includes(topic) || topic.includes(k)));
     }
     const embed = new EmbedBuilder()
-      .setTitle(topic ? "ts help: " + topic : "syndication — every command starts with `ts`")
+      .setTitle(topic ? "ts help: " + topic : "syndication - every command starts with `ts`")
       .setColor("#16e16e");
     if (!fields.length) {
       embed.setDescription("topics: " + HELP_FIELDS.map(([name]) => name.toLowerCase()).join(", "));

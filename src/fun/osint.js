@@ -178,7 +178,7 @@ async function ghemails(message, name) {
   const lines = [];
   for (const [email, repoSet] of found) {
     const tag = email.endsWith("@users.noreply.github.com") ? " [noreply]" : "";
-    lines.push(email + tag + " — " + [...repoSet].slice(0, 4).join(", "));
+    lines.push(email + tag + " - " + [...repoSet].slice(0, 4).join(", "));
   }
   await message.channel.send(cut(lines.join("\n")));
 }

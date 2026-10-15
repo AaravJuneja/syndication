@@ -94,7 +94,7 @@ module.exports = async function links(client, message) {
     await sendPaged(
       message,
       "Short Links",
-      all.rows.map((l) => ({ name: l.name + " — " + l.backlink, value: "<" + l.link + ">" }))
+      all.rows.map((l) => ({ name: l.name + " - " + l.backlink, value: "<" + l.link + ">" }))
     );
     return true;
   }
