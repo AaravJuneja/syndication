@@ -1,17 +1,25 @@
 # Deploy Syndication
 
-Cloudflare serves `go.squeakyfiddlepro.me` and Discord slash commands. A local
-Bun process handles `ts` commands. Both use Turso.
+Use your own Discord application, Turso database, and Cloudflare account.
+The Worker serves slash commands and short links. The gateway handles `ts` commands
+
+## Setup
+
+1. Run `bun install --frozen-lockfile`
+2. Copy `.env.example` to `.env`. Set `TOKEN` to your bot token,
+   `TURSO_URL` to your database URL, `TURSO_AUTH_TOKEN` to its auth token,
+   and `ALLOWED_USERS` to comma-separated Discord user IDs. Run `chmod 600 .env`
+3. Run `bun run db:init` to initialize the database
+4. Install the Discord application in your server with the `bot` and
+   `applications.commands` scopes
 
 ## Discord gateway
 
-1. Run `bun install --frozen-lockfile`.
-2. Copy `.env.example` to `.env`. Set `TOKEN`, `TURSO_URL`, `TURSO_AUTH_TOKEN`,
-   and comma-separated `ALLOWED_USERS`. Run `chmod 600 .env`.
-3. Enable Message Content Intent in Discord. For welcomes, also set
-   `WELCOME_CHANNEL_ID` and enable Server Members Intent.
+Enable Message Content Intent in Discord. For welcome messages, also set
+`WELCOME_CHANNEL_ID` and enable Server Members Intent
 
-Run `RUN_MODE=gateway bun start` manually, or install the Linux user service:
+Run `RUN_MODE=gateway bun start`, or adjust `WorkingDirectory` and `ExecStart`
+in `deploy/systemd/syndication-gateway.service` before installing it:
 
 ```sh
 unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -20,9 +28,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now syndication-gateway.service
 ```
 
-Adjust the unit if your repo or Bun paths differ. With systemd linger enabled,
-the service starts at boot. Prefix commands go offline when the host sleeps or
-shuts down. Run one gateway per bot token.
+With systemd linger enabled, the service starts at boot. Run one gateway per bot token
 
 ```sh
 journalctl --user -u syndication-gateway.service -n 30 --no-pager
@@ -31,20 +37,25 @@ systemctl --user restart syndication-gateway.service
 
 ## Cloudflare Worker
 
-Install Node.js 22.12 or newer for Wrangler.
+Install Node.js 22.12 or newer for Wrangler
 
-Use `https://go.squeakyfiddlepro.me/interactions` as Discord's interactions
-endpoint. The deploy script reads `TURSO_URL`, `DOMAIN`, and `ALLOWED_USERS`
-from `.env` and gets the signing public key from Discord. Set
-`TURSO_AUTH_TOKEN` as a Worker secret if it is not already configured.
+1. In `wrangler.jsonc`, choose a Worker `name` and replace the route's `pattern`
+   with a hostname you manage in Cloudflare. To use `workers.dev` instead,
+   remove `routes` and set `workers_dev` to `true`
+2. Set `DOMAIN` in `.env` to the resulting HTTPS URL, with no path. Setting
+   `DOMAIN` does not change the route in `wrangler.jsonc`
+3. Deploy the Worker and set the same Turso token as a Worker secret:
 
-```sh
-bun run wrangler login
-bun run worker:deploy
-bun run slash:register --global
-```
+   ```sh
+   bun run wrangler login
+   bun run worker:deploy
+   bun run wrangler secret put TURSO_AUTH_TOKEN
+   ```
 
-Run `bun run db:init` for a new database. For local Worker testing, put test
-bindings in `.dev.vars` and run `bun run worker:dev` (HTTPS on port 8787).
+4. In the Discord Developer Portal, set the Interactions Endpoint URL to your
+   `DOMAIN` followed by `/interactions`. Run `bun run slash:register --global`
+   to replace the global commands for your Discord application
 
-Verify `GET /health`, `/what` with `SGVsbG8=`, and `ts what SGVsbG8=`.
+For local Worker testing, put test bindings in `.dev.vars` and run
+`bun run worker:dev` (HTTPS on port 8787). To verify deployment, check `/health`
+and try `/what` with `SGVsbG8=` in Discord
