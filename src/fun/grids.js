@@ -5,7 +5,7 @@ function cut(s) {
   return s.length > 1900 ? s.slice(0, 1900) + "…" : s;
 }
 
-function parseOpts(parts) {
+function parseOpts(parts, allowColrow = false) {
   const o = { key: "", n: 0, drop: 0, vert: false, colrow: false, input: "", text: "" };
   const rest = [];
   for (const tok of parts) {
@@ -14,6 +14,7 @@ function parseOpts(parts) {
     else if (/^n=\d+$/.test(low)) o.n = parseInt(low.slice(2));
     else if (/^drop=\d+$/.test(low)) o.drop = parseInt(low.slice(5));
     else if (/^in=/.test(tok)) o.input = tok.slice(3);
+    else if (allowColrow && low === "colrow" && !rest.length && parts.length > 1) o.colrow = true;
     else rest.push(tok);
   }
   o.text = rest.join(" ");
@@ -318,8 +319,10 @@ function wsEncode(text) {
 }
 
 function wsDecode(prog) {
-  let t = String(prog);
-  t = /[ \t\n]/.test(t) ? [...t].filter((c) => c === " " || c === "\t" || c === "\n").map((c) => (c === " " ? "S" : c === "\t" ? "T" : "L")).join("") : t.toUpperCase().replace(/[^STL]/g, "");
+  const raw = String(prog);
+  const t = /[STL]/i.test(raw)
+    ? raw.toUpperCase().replace(/[^STL]/g, "")
+    : raw.replace(/[^ \t\n]/g, "").replace(/ /g, "S").replace(/\t/g, "T").replace(/\n/g, "L");
   if (!t) return null;
   let p = 0;
   const stack = [];
@@ -466,7 +469,7 @@ module.exports = async function grids(client, message) {
   if (lower.startsWith(p + "polybius ")) {
     const parts = arg(p + "polybius ").split(/\s+/);
     const mode = (parts.shift() || "").toLowerCase();
-    const o = parseOpts(parts);
+    const o = parseOpts(parts, true);
     if ((mode !== "encode" && mode !== "decode") || !o.text) {
       await message.channel.send("Usage: `ts polybius encode|decode [k=KEY] [colrow] <text>` (J joins I)");
       return true;
@@ -561,9 +564,8 @@ module.exports = async function grids(client, message) {
     return true;
   }
   if (lower.startsWith(p + "ws ")) {
-    const parts = arg(p + "ws ").split(/\s+/);
-    const mode = (parts.shift() || "").toLowerCase();
-    const text = parts.join(" ");
+    const [, verb = "", text = ""] = content.slice((p + "ws ").length).match(/^\s*(\S+)\s([\s\S]*)$/) || [];
+    const mode = verb.toLowerCase();
     if (mode === "encode" && text) {
       await message.channel.send(cut(wsEncode(text.slice(0, 200))));
       return true;

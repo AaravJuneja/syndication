@@ -181,6 +181,8 @@ function xorBrute(hexStr) {
 }
 
 const { morseEncode, morseDecode } = require("./morse");
+const { identify, formatIdentify } = require("./identify.js");
+const { solveLayers, LAYER_LIMITS } = require("./layers.js");
 
 function freq(s) {
   const counts = {};
@@ -244,35 +246,6 @@ function jwtDecode(tok) {
   } catch {
     return null;
   }
-}
-
-const EN_FREQ = {
-  a: 8.2, b: 1.5, c: 2.8, d: 4.3, e: 13.0, f: 2.2, g: 2.0, h: 6.1, i: 7.0,
-  j: 0.15, k: 0.77, l: 4.0, m: 2.4, n: 6.7, o: 7.5, p: 1.9, q: 0.095, r: 6.0,
-  s: 6.3, t: 9.1, u: 2.8, v: 0.98, w: 2.4, x: 0.15, y: 2.0, z: 0.074,
-};
-
-function chi2(s) {
-  const counts = {};
-  let total = 0;
-  for (const c of s.toLowerCase()) {
-    if (c >= "a" && c <= "z") {
-      counts[c] = (counts[c] || 0) + 1;
-      total++;
-    }
-  }
-  if (total < 12) return Infinity;
-  let chi = 0;
-  for (const c in EN_FREQ) {
-    const exp = (total * EN_FREQ[c]) / 100;
-    const obs = counts[c] || 0;
-    chi += ((obs - exp) * (obs - exp)) / exp;
-  }
-  return chi;
-}
-
-function printable(s) {
-  return s.length > 0 && s.length < 600 && !/�/.test(s) && /^[\x20-\x7e\s]*$/.test(s);
 }
 
 function run(bin, args, timeoutMs) {
@@ -398,68 +371,21 @@ async function crack(message, h) {
   await message.channel.send("Not found in first " + tried + " entries.");
 }
 
-async function auto(message, text, crib) {
-  const t = (text || "").slice(0, 500);
+async function auto(message, text, crib, depth) {
+  const t = (text || "").trim();
   if (!t) {
-    await message.channel.send("Usage: `ts auto <ciphertext> [crib=...]`");
+    await message.channel.send("Usage: `ts auto <ciphertext> [crib=text] [depth=1-" + LAYER_LIMITS.maxDepth + "]`");
     return;
   }
-  const seen = new Set([t]);
-  const cands = [];
-  const push = (label, out) => {
-    if (out && out !== t && !seen.has(out) && printable(out)) {
-      seen.add(out);
-      cands.push({ label, out, chi: chi2(out) });
-    }
-  };
-  push("base64", tryB64(t));
-  push("hex", tryHex(t));
-  push("ascii85", require("./bases").a85decode(t));
-  if (/=[0-9A-Fa-f]{2}/.test(t)) push("quoted-printable", require("./bases").qpDecode(t));
-  if (/[\u{1F3F7}-\u{1F4F6}]/u.test(t)) push("base100", require("./bases").b100decode(t));
-  if (/^begin\s|\n[A-M`#]/m.test(t) || /^[A-M`#][ -`]{7,}/.test(t)) push("uu", require("./bases").uudecode(t));
-  push("base32", b32decode(t));
-  push("binary", tryBin(t));
-  try {
-    const u = decodeURIComponent(t);
-    if (u !== t) push("url", u);
-  } catch {}
-  const hd = htmlDecode(t);
-  if (hd !== t) push("html", hd);
-  const ud = uniDecode(t);
-  if (ud !== t) push("unicode", ud);
-  push("rot13", caesar(t, 13));
-  let bestN = 0;
-  let bestS = Infinity;
-  for (let n = 1; n < 26; n++) {
-    const s = chi2(caesar(t, n));
-    if (s < bestS) {
-      bestS = s;
-      bestN = n;
-    }
-  }
-  if (bestS < 300) push("caesar-" + bestN, caesar(t, bestN));
-  push("atbash", atbash(t));
-  push("reverse", [...t].reverse().join(""));
-  for (let r = 2; r <= 6; r++) push("rail-" + r, railDecode(t, r));
-  const xb = xorBrute(t);
-  if (xb && printable(xb[0].s)) push("xor-" + xb[0].k, xb[0].s);
-  if (!cands.length) {
-    await message.channel.send("Nothing readable. Try `ts freq`, `ts ic`, or `ts vig`.");
-    return;
-  }
-  cands.sort((a, b) => (isFinite(a.chi) ? a.chi : 1e18) - (isFinite(b.chi) ? b.chi : 1e18));
-  let shown = cands;
-  if (crib) {
-    try {
-      const re = new RegExp(crib, "i");
-      const hits = cands.filter((c) => re.test(c.out));
-      if (hits.length) shown = hits;
-    } catch {}
-  }
-  await message.channel.send(
-    cut(shown.slice(0, 8).map((c) => "[" + c.label + (isFinite(c.chi) ? " x2=" + c.chi.toFixed(1) : "") + "] " + c.out.slice(0, 220)).join("\n"))
+  const { results, stats } = solveLayers(t, { crib, depth });
+  const shown = results.filter((r) => r.path.length && (r.fit >= 0.45 || r.score >= 10)).slice(0, 6);
+  const lines = shown.length
+    ? shown.map((r) => "[" + r.path.join(" > ") + "] fit " + Number(r.fit).toFixed(2) + (crib && r.text.toLowerCase().includes(crib.toLowerCase()) ? " crib hit" : "") + ": " + r.text.replace(/\s+/g, " ").slice(0, 200))
+    : ["Nothing readable within the search limits. Try `ts what`, `ts freq`, `ts ic` or `ts vigcrack`."];
+  lines.push(
+    "searched " + stats.generated + " states, expanded " + stats.expanded + " (limits " + stats.maxStates + " / " + stats.maxExpansions + "), depth up to " + stats.depth + ", stopped: " + stats.stoppedBy + (stats.truncated ? ", input cut to " + LAYER_LIMITS.maxInput + " chars" : "")
   );
+  await message.channel.send(cut(lines.join("\n")));
 }
 
 const WHAT_RULES = [
@@ -517,6 +443,12 @@ const WHAT_RULES = [
   ["pigpen glyphs", /[┘┴└├□┤┌┬┐∨∧><·]/, 4],
   ["whitespace code", /^[STLstl \t\n]{16,}$/, 5],
 ];
+
+const WHAT_COVERED = new Set([
+  "JWT", "MD5 hash", "SHA1 hash", "SHA256 hash", "SHA512 hash", "bcrypt hash", "base64 blob", "hex blob", "binary string",
+  "morse code", "HTML entity soup", "unicode escapes", "ADFGVX cipher", "ADFGX cipher", "base100 emoji", "quoted-printable",
+  "uuencoded body", "ascii85 block", "pigpen glyphs", "whitespace code",
+]);
 
 function whatIs(text) {
   const t = (text || "").trim();
@@ -589,7 +521,8 @@ const HELP_TOPICS = {
   esolangs: ["deadfish", "cow", "whitespace"],
   grids: ["polybius", "pigpen", "keyboard", "rc4", "hill", "deadfish", "cow", "whitespace"],
   xor: ["xor"],
-  identify: ["identify", "detect", "freq", "hash", "jwt", "auto", "what", "decon"],
+  identify: ["identify", "detect", "freq", "hash", "jwt", "what", "decon"],
+  auto: ["auto", "layer", "solve", "chain"],
   crackers: ["crack", "sub", "password", "rockyou"],
   rsa: ["rsa", "factor", "wiener", "prime"],
   files: ["file", "web", "steg", "image", "png", "carve"],
@@ -603,7 +536,7 @@ const HELP_TOPICS = {
 const HELP_FIELDS = [
   ["Codecs", "`b64` `hex` `url` `bin` `morse` `b32` `html` `uni` - `ts <codec> encode|decode <text>`"],
   ["Shifts", "`rot [n]` `rot47` `caesar` (all 25) `atbash` `rev` `upper` `lower` `len`"],
-  ["Keyed ciphers", "`vig encode|decode <key>` `rail` (all rails) `affine` `bacon` `a1z26` `ook`"],
+  ["Keyed ciphers", "`vig encode|decode <key>` `rail` (all rails) `affine` `bacon encode|decode [v=26]` (24 letter table by default, I=J and U=V) `a1z26` `ook`"],
   ["Squares", "`playfair` `bifid [n=]` `trifid [n=]` `foursquare` `twosquare [vert]` - `encode|decode [k=KEY]`"],
   ["Transposition", "`columnar k=KEY [pad]` `scytale n=` `route w=` `adfgvx|adfgx [sq=] [k=] [pad]`"],
   ["Poly ciphers", "`gronsfeld k=digits` `autokey k=` `beaufort k= [german]` `porta k=` - `encode|decode`"],
@@ -611,7 +544,8 @@ const HELP_FIELDS = [
   ["Grids & misc", "`polybius [k=] [colrow]` `pigpen` `kb right|left|up|down` `rc4 k= [drop=]` `hill k=a,b,c,d`"],
   ["Esolangs", "`deadfish run|encode` `cow run [in=]` `ws encode|decode`"],
   ["XOR lab", "`xor <hex> <key>` `xorbrute` `xorcrack [crib=]` `xordrag <hex> <crib>` `dec` `enc`"],
-  ["Identify", "`freq` `ic` `hashid` `jwt` `decon` `auto [crib=]` `what` - name that blob"],
+  ["Identify", "`what <text>` (alias `identify`): ranked cipher and encoding guesses with evidence, caveats and a next command. Scores are heuristics, not probabilities. Checks the first 4000 chars; key searches are ranked by letter frequency and only the top few are read-checked on the first 400 chars. Also `freq` `ic` `hashid` `jwt` `decon`"],
+  ["Auto solve", "`auto <text> [crib=text] [depth=1-6]`: peels layers best-first, cheap decodes first. Steps: base64/32/58/85/100, hex, binary, octal, decimal, a1z26, url, html, \\u escapes, qp, uu, morse, bacon, braille, rot13, best caesar, atbash, reverse, rot47, best rail (2-8), best 1-byte xor. Limits: 2000 chars in, depth 4 by default, 600 states, 200 expansions. Crib is a plain substring and stops the search when found"],
   ["Crackers", "`sub` `vigcrack` `hash` `crack` (rockyou) - ranked guesses, you pick"],
   ["RSA kit", "`factor` `rsa <n> <e> <c>` `wiener` `hastad <c:n>…` `fermat` `factordb` `saml`"],
   ["Files & web", "`get` `forensics` `qr` `png` `lsb` `carve` `negate` `flop` `solar` `web` - pass a URL"],
@@ -623,7 +557,7 @@ const HELP_FIELDS = [
   ["Memes", "just say `hee hee`, `bhakas alert`, `invalid opinion`, `popcorn` - or teach some: `ts add \"x\" \"y\"` (`ts show|remove|reset|say`, `baller ` is an alias of `ts `)"],
 ];
 
-const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
+const HELP_KEYS = ["codecs", "shifts", "keyed", "squares", "transpose", "polyalpha", "bases", "grids", "esolangs", "xor", "identify", "auto", "crackers", "rsa", "files", "audio", "osint", "doctor", "links", "memes"];
 
 module.exports = async function codecs(client, message) {
   const p = config.commandPrefix;
@@ -852,17 +786,30 @@ module.exports = async function codecs(client, message) {
     await crack(message, arg(p + "crack ").split(/\s+/)[0] || "");
     return true;
   }
-  if (lower.startsWith(p + "what ")) {
-    const found = whatIs(arg(p + "what ").slice(0, 500));
-    await message.channel.send(found.length ? cut(found.join(" / ")) : "No idea what that is.");
+  const idCmd = lower.startsWith(p + "what ") ? p + "what " : lower.startsWith(p + "identify ") ? p + "identify " : null;
+  if (idCmd) {
+    const text = arg(idCmd);
+    if (!text) {
+      await message.channel.send("Usage: `ts what <text>` (alias `ts identify`)");
+      return true;
+    }
+    const lines = [formatIdentify(identify(text), { max: 5 })];
+    const sample = text.trim().slice(0, 500);
+    const formats = WHAT_RULES.filter((r) => Number(r[2]) <= 4 && r[1] instanceof RegExp && r[1].test(sample) && !WHAT_COVERED.has(String(r[0]))).map((r) => String(r[0]));
+    if (formats.length) lines.push("format matches: " + formats.join(" / "));
+    const hashes = hashId(text);
+    if (hashes.length) lines.push("hash formats: " + hashes.join(" / "));
+    await message.channel.send(cut(lines.join("\n")));
     return true;
   }
   if (lower.startsWith(p + "auto ")) {
     const parts = arg(p + "auto ").split(/\s+/);
     const cribBit = parts.find((t) => t.toLowerCase().startsWith("crib="));
+    const depthBit = parts.find((t) => /^depth=\d+$/i.test(t));
     const crib = cribBit ? cribBit.slice(5) : "";
-    const text = parts.filter((t) => t !== cribBit).join(" ");
-    await auto(message, text, crib);
+    const depth = depthBit ? Number(depthBit.slice(6)) : undefined;
+    const text = parts.filter((t) => t !== cribBit && t !== depthBit).join(" ");
+    await auto(message, text, crib, depth);
     return true;
   }
   if (lower === p + "doctor") {

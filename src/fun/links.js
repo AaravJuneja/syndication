@@ -1,6 +1,7 @@
 const config = require("../config");
 const { db } = require("../db");
 const { sendPaged } = require("./pager");
+const { INSERT_LINK, validNewSlug, linkTarget } = require("../shortlinks");
 
 function shortUrl(short) {
   return config.domain + "/" + short;
@@ -16,7 +17,8 @@ const HELP =
 
 module.exports = async function links(client, message) {
   const cmd = config.commandPrefix + "link";
-  if (!message.content.toLowerCase().startsWith(cmd.toLowerCase())) return false;
+  const lower = message.content.toLowerCase();
+  if (lower !== cmd.toLowerCase() && !lower.startsWith(cmd.toLowerCase() + " ")) return false;
 
   const parts = message.content.slice(cmd.length).trim().split(/\s+/).filter(Boolean);
   const sub = (parts.shift() || "help").toLowerCase();
@@ -25,27 +27,33 @@ module.exports = async function links(client, message) {
     await message.channel.send(HELP);
     return true;
   }
+  if (["add", "edit", "remove"].includes(sub) && !config.allowedUsers.includes(message.author.id)) {
+    await message.channel.send("Only a configured admin can change short links.");
+    return true;
+  }
 
   if (sub === "add") {
     const name = parts[0];
     const short = parts[1];
-    const url = parts[2];
-    if (!name || !short || !url) {
+    if (!name || !short || !parts[2] || parts.length !== 3) {
       await message.channel.send("Usage: `ts link add <name> <short> <url>`");
       return true;
     }
-    const dup = await db
-      .execute({ sql: "SELECT backlink FROM links WHERE backlink = ?", args: [short] })
-      .catch(() => ({ rows: [] }));
-    if (dup.rows.length) {
+    if (!validNewSlug(short)) {
+      await message.channel.send("Use 1 to 64 letters, digits, hyphens, or underscores. `health` and `interactions` are reserved.");
+      return true;
+    }
+    const url = linkTarget(parts[2]);
+    if (!url) {
+      await message.channel.send("Use a full HTTP(S) destination URL without credentials.");
+      return true;
+    }
+    const result = await db.execute({ sql: INSERT_LINK, args: [short, name, url, new Date().toISOString()] });
+    if (!result.rowsAffected) {
       await message.channel.send("Short link `" + short + "` already exists.");
       return true;
     }
-    await db.execute({
-      sql: "INSERT INTO links (backlink, name, link, date) VALUES (?, ?, ?, ?)",
-      args: [short, name, url, new Date().toISOString()],
-    });
-    await message.channel.send("New short link from " + message.author.username + ":\nName: " + name + "\nShort: " + shortUrl(short) + "\nLink: <" + url + ">");
+    await message.channel.send("New short link: " + shortUrl(short));
     return true;
   }
 
@@ -57,8 +65,7 @@ module.exports = async function links(client, message) {
     }
     for (const short of shorts) {
       const r = await db
-        .execute({ sql: "DELETE FROM links WHERE backlink = ?", args: [short] })
-        .catch(() => ({ rowsAffected: 0 }));
+        .execute({ sql: "DELETE FROM links WHERE backlink = ?", args: [short] });
       await message.channel.send(
         r.rowsAffected > 0 ? "Short link `" + short + "` removed." : "Short link `" + short + "` not found."
       );
@@ -69,14 +76,17 @@ module.exports = async function links(client, message) {
   if (sub === "edit") {
     const short = parts[0];
     const field = parts[1];
-    const value = parts.slice(2).join(" ");
-    if (!short || !["name", "link"].includes(field) || !value) {
+    const input = parts.slice(2).join(" ");
+    if (!short || !["name", "link"].includes(field) || !input) {
       await message.channel.send("Usage: `ts link edit <short> <field> <new value>`\nFields: name, link");
       return true;
     }
-    const r = await db
-      .execute({ sql: "UPDATE links SET " + field + " = ? WHERE backlink = ?", args: [value, short] })
-      .catch(() => ({ rowsAffected: 0 }));
+    const value = field === "link" ? linkTarget(input) : input;
+    if (!value) {
+      await message.channel.send("Use a full HTTP(S) destination URL without credentials.");
+      return true;
+    }
+    const r = await db.execute({ sql: "UPDATE links SET " + field + " = ? WHERE backlink = ?", args: [value, short] });
     if (!r.rowsAffected) {
       await message.channel.send("Short link `" + short + "` not found.");
       return true;
@@ -86,7 +96,7 @@ module.exports = async function links(client, message) {
   }
 
   if (sub === "show") {
-    const all = await db.execute("SELECT name, backlink, link FROM links ORDER BY rowid").catch(() => ({ rows: [] }));
+    const all = await db.execute("SELECT name, backlink, link FROM links ORDER BY rowid");
     if (!all.rows.length) {
       await message.channel.send("No short links yet.");
       return true;

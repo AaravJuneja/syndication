@@ -7,21 +7,26 @@
     "start": "bun src/index.js",
     "dev": "bun --watch src/index.js",
     "check": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun --no-env-file test",
+    "db:init": "bun scripts/init-db.cjs",
+    "worker:dev": "wrangler dev --local-protocol https",
+    "worker:deploy": "bun scripts/deploy-worker.mjs",
+    "slash:register": "bun scripts/register-slash.mjs"
   },
   "license": "ISC",
   "dependencies": {
     "@libsql/client": "^0.18.0",
-    "discord.js": "^14.27.0",
-    "dotenv": "^18.0.7",
+    "discord.js": "^14.28.1",
+    "dotenv": "^18.0.10",
     "express": "^5.3.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
-    "bun-types": "^1.4.3",
-    "typescript": "^7.0.2"
+    "@types/node": "^26.6.6",
+    "bun-types": "^1.4.5",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.166.0"
   }
 }

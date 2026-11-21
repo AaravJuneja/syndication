@@ -1,0 +1,14 @@
+[Unit]
+Description=Syndication Discord gateway
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/Syndication
+Environment=RUN_MODE=gateway
+ExecStart=%h/.bun/bin/bun src/index.js
+Restart=on-failure
+RestartSec=10s
+UMask=0077
+
+[Install]
+WantedBy=default.target

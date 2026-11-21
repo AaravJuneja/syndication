@@ -1,8 +1,4 @@
-import { describe, it, expect, beforeAll } from "bun:test";
-
-process.env.TURSO_URL = "file:/tmp/syndication-test2.db";
-
-const { initDb } = require("../src/db.js");
+import { describe, it, expect } from "bun:test";
 const squares = require("../src/fun/squares.js");
 const transpose = require("../src/fun/transpose.js");
 const bases = require("../src/fun/bases.js");
@@ -21,10 +17,6 @@ const msg = (content) => ({
   author: { username: "t", id: "9" }, member: {}, delete: async () => {},
 });
 const lastText = () => sent.filter((x) => typeof x === "string").pop() || "";
-
-beforeAll(async () => {
-  await initDb();
-});
 
 describe("squares", () => {
   it("playfair wiki vector", async () => {
@@ -195,6 +187,12 @@ describe("grids", () => {
     await grids({}, msg("ts polybius decode k=DCODE 351332542114"));
     expect(lastText()).toBe("POLYBE");
   });
+  it("polybius column-first coordinates", async () => {
+    await grids({}, msg("ts polybius encode colrow DCODE"));
+    expect(lastText()).toBe("41 31 43 41 51");
+    await grids({}, msg("ts polybius decode colrow 41 31 43 41 51"));
+    expect(lastText()).toBe("DCODE");
+  });
   it("pigpen roundtrip", async () => {
     await grids({}, msg("ts pigpen encode DCODE"));
     expect(lastText()).toBe("├└┤·├□");
@@ -243,6 +241,11 @@ describe("grids", () => {
     await grids({}, msg("ts ws encode H"));
     expect(lastText()).toBe("SSSTSSTSSSLTLSSLLL");
     await grids({}, msg("ts ws decode SSSTSSTSSSLTLSSLLL"));
+    expect(lastText()).toBe("H");
+  });
+  it("decodes an actual Whitespace program", async () => {
+    const source = "SSSTSSTSSSLTLSSLLL".replace(/S/g, " ").replace(/T/g, "\t").replace(/L/g, "\n");
+    await grids({}, msg("ts ws decode " + source));
     expect(lastText()).toBe("H");
   });
 });

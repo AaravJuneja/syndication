@@ -1,8 +1,10 @@
-const DB_HOST = "syndication-juneja.aws-ap-south-1.turso.io";
-const APP_PUBLIC_KEY = "b5fe3f8cead4fcea076f4299a740fdb323889e3f0c36234f5df2c4d889ebbf18";
-const ALLOWED_USERS = new Set(
-  "0,0,0".split(",")
-);
+import { LOOKUP_LINK, INSERT_LINK, INSERT_TRIGGER, validNewSlug, linkTarget } from "./src/shortlinks.js";
+import { identify, formatIdentify } from "./src/fun/identify.js";
+import { baconEncode, baconDecode } from "./src/fun/bacon.js";
+import { solveLayers } from "./src/fun/layers.js";
+
+const MAX_INTERACTION_BYTES = 128 * 1024;
+const DATABASE_COMMANDS = new Set(["baller-add", "baller-show", "baller-remove", "link-add", "link-show", "link-edit", "link-remove"]);
 
 function hexToBytes(h) {
   const out = new Uint8Array(h.length / 2);
@@ -10,27 +12,33 @@ function hexToBytes(h) {
   return out;
 }
 
-async function verifyDiscord(request, body) {
-  const sig = request.headers.get("X-Signature-Ed25519");
-  const ts = request.headers.get("X-Signature-Timestamp");
-  if (!sig || !ts) return false;
+async function verifyDiscord(sig, ts, body, publicKey) {
+  if (!/^[a-f\d]{64}$/i.test(publicKey || "")) return false;
   try {
     const key = await crypto.subtle.importKey(
       "raw",
-      hexToBytes(APP_PUBLIC_KEY),
-      { name: "NODE-ED25519", namedCurve: "NODE-ED25519" },
+      hexToBytes(publicKey),
+      "Ed25519",
       false,
       ["verify"]
     );
-    const msg = new TextEncoder().encode(ts + body);
-    return await crypto.subtle.verify("NODE-ED25519", key, hexToBytes(sig), msg);
+    const timestamp = new TextEncoder().encode(ts);
+    const msg = new Uint8Array(timestamp.length + body.length);
+    msg.set(timestamp);
+    msg.set(body, timestamp.length);
+    return await crypto.subtle.verify("Ed25519", key, hexToBytes(sig), msg);
   } catch {
     return false;
   }
 }
 
-function slashReply(content) {
-  return Response.json({ type: 4, data: { content: String(content).slice(0, 1900) } });
+function replyData(content) {
+  const text = String(content);
+  return { content: text.length > 1900 ? text.slice(0, 1899) + "…" : text || "(empty)", allowed_mentions: { parse: [] } };
+}
+
+function slashReply(content, ephemeral = false) {
+  return Response.json({ type: 4, data: { ...replyData(content), ...(ephemeral ? { flags: 64 } : {}) } });
 }
 
 function opt(interaction, name) {
@@ -46,8 +54,8 @@ function caesar(s, n) {
 }
 
 async function shaHex(algo, text) {
-  const map = { sha1: "SHA-1", sha224: "SHA-224", sha256: "SHA-256", sha384: "SHA-384", sha512: "SHA-512" };
-  if (!map[algo]) return null;
+  const map = { sha1: "SHA-1", sha256: "SHA-256", sha384: "SHA-384", sha512: "SHA-512" };
+  if (!Object.hasOwn(map, algo)) return null;
   const digest = await crypto.subtle.digest(map[algo], new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -82,27 +90,6 @@ const MORSE_REV = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [
 
 const BRAILLE_MAP = { "⠁": "a", "⠃": "b", "⠉": "c", "⠙": "d", "⠑": "e", "⠋": "f", "⠛": "g", "⠓": "h", "⠊": "i", "⠚": "j", "⠅": "k", "⠇": "l", "⠍": "m", "⠝": "n", "⠕": "o", "⠏": "p", "⠟": "q", "⠗": "r", "⠎": "s", "⠞": "t", "⠥": "u", "⠧": "v", "⠺": "w", "⠭": "x", "⠽": "y", "⠵": "z", "⠀": " " };
 const BRAILLE_REV = Object.fromEntries(Object.entries(BRAILLE_MAP).map(([k, v]) => [v, k]));
-
-const EN_FREQ = { a: 8.2, b: 1.5, c: 2.8, d: 4.3, e: 13, f: 2.2, g: 2, h: 6.1, i: 7, j: 0.15, k: 0.77, l: 4, m: 2.4, n: 6.7, o: 7.5, p: 1.9, q: 0.095, r: 6, s: 6.3, t: 9.1, u: 2.8, v: 0.98, w: 2.4, x: 0.15, y: 2, z: 0.074 };
-
-function chi2(s) {
-  const counts = {};
-  let total = 0;
-  for (const c of s.toLowerCase()) {
-    if (c >= "a" && c <= "z") {
-      counts[c] = (counts[c] || 0) + 1;
-      total++;
-    }
-  }
-  if (total < 12) return Infinity;
-  let chi = 0;
-  for (const c in EN_FREQ) {
-    const exp = (total * EN_FREQ[c]) / 100;
-    const obs = counts[c] || 0;
-    chi += ((obs - exp) * (obs - exp)) / exp;
-  }
-  return chi;
-}
 
 function englishScore(s) {
   const m = s.toLowerCase().match(/[a-z ]/g);
@@ -176,19 +163,25 @@ function b32encode(s) {
   return out;
 }
 
-async function turso(env, sql, args) {
-  const res = await fetch("https://" + DB_HOST + "/v2/pipeline", {
+async function turso(env, sql, args = [], write = false) {
+  const token = write ? env.TURSO_AUTH_TOKEN : env.TURSO_READ_TOKEN || env.TURSO_AUTH_TOKEN;
+  const url = new URL((env.TURSO_URL || "").replace(/^libsql:\/\//, "https://"));
+  if (url.protocol !== "https:" || !token) throw new Error("Turso is not configured");
+  const res = await fetch(new URL("/v2/pipeline", url), {
     method: "POST",
-    headers: { Authorization: "Bearer " + env.TURSO_AUTH_TOKEN, "Content-Type": "application/json" },
-    body: JSON.stringify({ requests: [{ type: "execute", stmt: { sql, args: (args || []).map((v) => ({ type: "text", value: String(v) })) } }] }),
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests: [
+      { type: "execute", stmt: { sql, args: args.map((value) => ({ type: "text", value })) } },
+      { type: "close" },
+    ] }),
+    signal: AbortSignal.timeout(8000),
   });
+  if (!res.ok) throw new Error("Turso HTTP failure");
   const j = await res.json();
-  const r = (((j.results || [])[0] || {}).response || {}).result || {};
-  return r.rows || [];
-}
-
-function cellVal(cell) {
-  return cell && typeof cell === "object" ? cell.value : cell;
+  const statement = j.results?.[0];
+  const result = statement?.response?.result;
+  if (statement?.type !== "ok" || !Array.isArray(result?.rows)) throw new Error("Turso statement failed");
+  return { rows: result.rows.map((row) => row.map((cell) => cell?.value)), changed: result.affected_row_count || 0 };
 }
 
 export const SLASH_COMMANDS = [
@@ -204,7 +197,7 @@ export const SLASH_COMMANDS = [
   { name: "upper", description: "uppercase", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "lower", description: "lowercase", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "len", description: "length in chars and bytes", options: [{ name: "text", description: "text", type: 3, required: true }] },
-  { name: "hash", description: "sha hash", options: [{ name: "algo", description: "sha1|sha224|sha256|sha384|sha512", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
+  { name: "hash", description: "sha hash", options: [{ name: "algo", description: "sha1|sha256|sha384|sha512", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
   { name: "dec", description: "code points to text", options: [{ name: "codes", description: "72 105", type: 3, required: true }] },
   { name: "enc", description: "text to code points", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "morse", description: "morse encode or decode", options: [{ name: "mode", description: "encode|decode", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
@@ -213,15 +206,15 @@ export const SLASH_COMMANDS = [
   { name: "ic", description: "index of coincidence", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "hashid", description: "identify a hash", options: [{ name: "hash", description: "hash", type: 3, required: true }] },
   { name: "jwt", description: "decode a jwt", options: [{ name: "token", description: "jwt", type: 3, required: true }] },
-  { name: "jwtforge", description: "forge unsigned jwt", options: [{ name: "payload", description: "{\"user\":\"admin\"}", type: 3, required: true }] },
   { name: "decon", description: "auto-detect encoding", options: [{ name: "text", description: "text", type: 3, required: true }] },
-  { name: "auto", description: "try everything, ranked", options: [{ name: "text", description: "ciphertext", type: 3, required: true }, { name: "crib", description: "known plaintext bits", type: 3, required: false }] },
-  { name: "what", description: "identify a blob", options: [{ name: "text", description: "text", type: 3, required: true }] },
+  { name: "auto", description: "try peeling layers of encoded text", options: [{ name: "text", description: "ciphertext", type: 3, required: true }, { name: "crib", description: "known plaintext substring", type: 3, required: false }] },
+  { name: "what", description: "rank likely ciphers and encodings", options: [{ name: "text", description: "ciphertext or encoded text", type: 3, required: true }] },
+  { name: "identify", description: "rank likely ciphers and encodings", options: [{ name: "text", description: "ciphertext or encoded text", type: 3, required: true }] },
   { name: "braille", description: "braille encode or decode", options: [{ name: "mode", description: "encode|decode", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
   { name: "tap", description: "tap code encode or decode", options: [{ name: "mode", description: "encode|decode", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
   { name: "zw", description: "zero-width steg scan", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "a1z26", description: "numbers to letters and back", options: [{ name: "text", description: "text", type: 3, required: true }] },
-  { name: "bacon", description: "bacon cipher", options: [{ name: "mode", description: "encode|decode", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }] },
+  { name: "bacon", description: "bacon cipher", options: [{ name: "mode", description: "encode|decode", type: 3, required: true }, { name: "text", description: "text", type: 3, required: true }, { name: "variant", description: "alphabet variant", type: 4, choices: [{ name: "Original (24 letters)", value: 24 }, { name: "Modern (26 letters)", value: 26 }] }] },
   { name: "ook", description: "run ook code", options: [{ name: "code", description: "Ook. Ook? ...", type: 3, required: true }] },
   { name: "rail", description: "railfence brute force", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "xor", description: "xor hex with key", options: [{ name: "hex", description: "hex", type: 3, required: true }, { name: "key", description: "key or byte", type: 3, required: true }] },
@@ -245,9 +238,12 @@ export const SLASH_COMMANDS = [
   { name: "amorse", description: "decode audio morse (wav)", options: [{ name: "url", description: "audio url", type: 3, required: true }] },
   { name: "baller-add", description: "teach a trigger", options: [{ name: "trigger", description: "trigger", type: 3, required: true }, { name: "response", description: "response", type: 3, required: true }] },
   { name: "baller-show", description: "list triggers" },
+  { name: "baller-remove", description: "delete an auto-reply trigger", options: [{ name: "trigger", description: "exact trigger text", type: 3, required: true }] },
   { name: "baller-say", description: "speak as bot", options: [{ name: "text", description: "text", type: 3, required: true }] },
   { name: "link-add", description: "create short link", options: [{ name: "name", description: "name", type: 3, required: true }, { name: "short", description: "slug", type: 3, required: true }, { name: "url", description: "target", type: 3, required: true }] },
   { name: "link-show", description: "list short links" },
+  { name: "link-edit", description: "edit a short link", options: [{ name: "short", description: "slug", type: 3, required: true }, { name: "field", description: "field to edit", type: 3, required: true, choices: [{ name: "Name", value: "name" }, { name: "Destination", value: "link" }] }, { name: "value", description: "new name or URL", type: 3, required: true }] },
+  { name: "link-remove", description: "delete a short link", options: [{ name: "short", description: "slug", type: 3, required: true }] },
 ];
 
 function bfRun(code) {
@@ -373,14 +369,14 @@ async function handleSlash(interaction, env) {
       "**syndication slash kit** (fast stuff, more on `ts` prefix)\n" +
       "`/b64 /hex /url /morse /b32` mode + text\n`/rot` `/caesar` `/atbash` `/rev`\n" +
       "`/upper /lower /len` `/hash` `/dec /enc` `/freq /ic`\n" +
-      "`/hashid /jwt /jwtforge /decon /auto /what`\n" +
+      "`/what` (also `/identify`) ranks ciphers and encodings\n`/hashid /jwt /decon /auto`\n" +
       "`/braille /tap /zw /a1z26 /bacon /ook /rail`\n" +
       "`/xor /xorbrute /b36 /saml`\n" +
       "`/factor /rsa /wiener /hastad /fermat /factordb`\n" +
       "`/backlink /user /ghuser /ghkeys /weather /ip`\n" +
       "`/forensics /dtmf /amorse` (url, wav only)\n" +
-      "`/baller-add /baller-show /baller-say`\n" +
-      "`/link-add /link-show` (posts to go.squeakyfiddlepro.me)"
+      "`/baller-add /baller-show /baller-remove /baller-say`\n" +
+      "`/link-add /link-show /link-edit /link-remove`"
     );
   }
   if (name === "b64" || name === "hex" || name === "url") {
@@ -426,7 +422,7 @@ async function handleSlash(interaction, env) {
   }
   if (name === "hash") {
     const out = await shaHex(get("algo").toLowerCase(), get("text"));
-    return slashReply(out === null ? "algo: sha1|sha224|sha256|sha384|sha512 (md5 stays on `ts hash`)" : out);
+    return slashReply(out === null ? "algo: sha1|sha256|sha384|sha512 (SHA-224 and MD5 are on `ts hash`)" : out);
   }
   if (name === "dec") {
     try {
@@ -489,23 +485,26 @@ async function handleSlash(interaction, env) {
     if (parts.length < 2) return slashReply("not a jwt");
     try {
       const b64u = (x) => new TextDecoder().decode(Uint8Array.from(atob(x.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
-      return slashReply("header: " + b64u(parts[0]) + "\npayload: " + b64u(parts[1]));
+      return slashReply("Decoded only; signature not verified.\nheader: " + b64u(parts[0]) + "\npayload: " + b64u(parts[1]), true);
     } catch {
       return slashReply("not decodable");
     }
   }
-  if (name === "jwtforge") {
-    try {
-      const payload = JSON.parse(get("payload"));
-      const b64u = (o) => btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      return slashReply(b64u({ alg: "none", typ: "JWT" }) + "." + b64u(payload) + ".");
-    } catch {
-      return slashReply('usage: payload {"user":"admin"}');
-    }
+  if (name === "auto") {
+    const text = get("text").trim();
+    const maxInput = 500;
+    const { results, stats } = solveLayers(text.slice(0, maxInput), {
+      crib: get("crib").trim(), depth: 3, maxExpansions: 8, maxStates: 24, fitSample: 140,
+    });
+    const matches = results.filter((r) => r.path.length && (r.fit >= 0.45 || r.score >= 10)).slice(0, 5);
+    const lines = matches.length
+      ? matches.map((r) => "[" + r.path.join(" > ") + "] " + r.text.replace(/\s+/g, " ").slice(0, 220))
+      : ["No readable result. Try `/what` or use `ts auto` for a deeper search."];
+    lines.push(`Depth up to ${stats.depth}; stopped: ${stats.stoppedBy}.` + (text.length > maxInput ? ` Analyzed first ${maxInput} of ${text.length} chars.` : ""));
+    return slashReply(lines.join("\n"));
   }
-  if (name === "decon" || name === "auto") {
-    const text = name === "decon" ? get("text") : get("text");
-    const t = text.slice(0, 300);
+  if (name === "decon") {
+    const t = get("text").slice(0, 300);
     const found = [];
     const push = (label, out) => {
       if (out && out !== t && !found.some((f) => f[1] === out)) found.push([label, out]);
@@ -518,54 +517,12 @@ async function handleSlash(interaction, env) {
       const u = decodeURIComponent(t);
       if (u !== t) push("url", u);
     } catch {}
-    if (name === "auto") {
-      push("rot13", caesar(t, 13));
-      let bestN = 0;
-      let bestS = Infinity;
-      for (let n = 1; n < 26; n++) {
-        const s = chi2(caesar(t, n));
-        if (s < bestS) {
-          bestS = s;
-          bestN = n;
-        }
-      }
-      if (bestS < 300) push("caesar-" + bestN, caesar(t, bestN));
-      push("atbash", t.replace(/[a-zA-Z]/g, (c) => {
-        const base = c <= "Z" ? 65 : 97;
-        return String.fromCharCode(base + 25 - (c.charCodeAt(0) - base));
-      }));
-      push("reverse", [...t].reverse().join(""));
-      const crib = get("crib");
-      let list = found;
-      if (crib) {
-        try {
-          const re = new RegExp(crib, "i");
-          const hits = found.filter((f) => re.test(f[1]));
-          if (hits.length) list = hits;
-        } catch {}
-      }
-      if (!list.length) return slashReply("nothing readable");
-      return slashReply(list.slice(0, 6).map((f) => "[" + f[0] + "] " + f[1].slice(0, 200)).join("\n"));
-    }
     if (!found.length) return slashReply("no idea - try /auto");
     return slashReply(found.map((f) => "[" + f[0] + "] " + f[1].slice(0, 300)).join("\n"));
   }
-  if (name === "what") {
-    const t = get("text").trim();
-    const rules = [
-      ["email", /^[^\s@]+@[^\s@]+\.[^\s@]{2}$/], ["ipv4", /^(?:\d{1,3}\.){3}\d{1,3}$/],
-      ["url", /^https?:\/\//i], ["onion", /^[a-z2-7]{56}$/], ["btc", /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/],
-      ["eth", /^0x[a-fA-F0-9]{40}$/], ["aws-key", /^AKIA[0-9A-Z]{16}$/], ["ghp-token", /^ghp_[A-Za-z0-9]{36}$/],
-      ["jwt", /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/], ["uuid", /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i],
-      ["md5", /^[0-9a-f]{32}$/i], ["sha1", /^[0-9a-f]{40}$/i], ["sha256", /^[0-9a-f]{64}$/i],
-      ["sha512", /^[0-9a-f]{128}$/i], ["bcrypt", /^\$2[aby]\$\d+\$.{53}$/], ["mac", /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/],
-      ["base64", /^(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/], ["hex", /^(?:[0-9a-f]{2}){8,}$/i],
-      ["binary", /^[01\s]{16,}$/], ["morse", /^[.\-/\s]{8,}$/], ["semver", /^v?\d+\.\d+\.\d+/],
-      ["ulid", /^[0-9A-HJKMNP-TV-Z]{26}$/], ["latlon", /^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/],
-      ["pem-key", /-----BEGIN (RSA )?PRIVATE KEY-----/], ["ssh-key", /^ssh-(rsa|ed25519)/],
-    ];
-    const hits = rules.filter((r) => r[1] instanceof RegExp && r[1].test(t)).map((r) => String(r[0]));
-    return slashReply(hits.length ? hits.join(" / ") : "no idea what that is");
+  if (name === "what" || name === "identify") {
+    const text = get("text").trim();
+    return slashReply(text ? formatIdentify(identify(text, { mode: "fast", limit: 5 })) : "Give me text to identify.");
   }
   if (name === "braille" || name === "tap") {
     const mode = get("mode").toLowerCase();
@@ -652,25 +609,10 @@ async function handleSlash(interaction, env) {
   }
   if (name === "bacon") {
     const mode = get("mode").toLowerCase();
-    const alpha = "abcdefghiklmnopqrstuvwxyz";
-    if (mode === "encode") {
-      let out = "";
-      for (const c of get("text").toLowerCase()) {
-        if (c === " ") continue;
-        const idx = alpha.indexOf(c === "j" ? "i" : c);
-        if (idx < 0) return slashReply("letters and spaces only");
-        out += idx.toString(2).padStart(5, "0").replace(/0/g, "a").replace(/1/g, "b") + " ";
-      }
-      return slashReply(out.trim());
-    }
-    const t = get("text").toLowerCase().replace(/[^ab01]/g, "").replace(/0/g, "a").replace(/1/g, "b");
-    if (!t || t.length % 5 !== 0) return slashReply("groups of 5 (A/B)");
-    let out = "";
-    for (let i = 0; i < t.length; i += 5) {
-      const v = parseInt(t.slice(i, i + 5).replace(/a/g, "0").replace(/b/g, "1"), 2);
-      out += v < 24 ? alpha[v] : "?";
-    }
-    return slashReply(out);
+    const opts = { variant: Number(get("variant") || "24") };
+    if (mode === "encode") return slashReply(baconEncode(get("text"), opts) || "letters and spaces only");
+    if (mode === "decode") return slashReply(baconDecode(get("text"), opts) || "groups of 5 (A/B)");
+    return slashReply("Choose encode or decode.");
   }
   if (name === "ook") {
     const ops = { "ook. ook?": ">", "ook? ook.": "<", "ook. ook.": "+", "ook! ook!": "-", "ook! ook.": ".", "ook. ook!": ",", "ook! ook?": "[", "ook? ook!": "]" };
@@ -1182,48 +1124,53 @@ async function handleSlash(interaction, env) {
       return slashReply("audio decode failed");
     }
   }
-  if (name.startsWith("baller") || name.startsWith("link-")) {
-    if (!env.TURSO_AUTH_TOKEN) return slashReply("db not configured");
-    const q = async (sql, args) => {
-      const res = await fetch("https://" + DB_HOST + "/v2/pipeline", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + env.TURSO_AUTH_TOKEN, "Content-Type": "application/json" },
-        body: JSON.stringify({ requests: [{ type: "execute", stmt: { sql, args: (args || []).map((v) => ({ type: "text", value: String(v) })) } }] }),
-      });
-      const j = await res.json();
-      const r = (((j.results || [])[0] || {}).response || {}).result || {};
-      return (r.rows || []).map((row) => row.map((c) => (c && typeof c === "object" ? c.value : c)));
-    };
+  if (name === "baller-say") return slashReply(get("text"));
+  if (DATABASE_COMMANDS.has(name)) {
+    const domain = (env.DOMAIN || "https://go.squeakyfiddlepro.me").replace(/\/$/, "");
     if (name === "baller-add") {
-      const t = get("trigger");
-      const r = get("response");
+      const t = get("trigger").trim();
+      const r = get("response").trim();
       if (!t || !r) return slashReply("need trigger + response");
-      const dup = await q("SELECT cause FROM ballers WHERE cause = ?", [t]);
-      if (!dup.length) await q("INSERT INTO ballers (cause, effect) VALUES (?, ?)", [t, r]);
-      return slashReply("taught: " + t);
+      if (t.length > 2000 || r.length > 2000) return slashReply("Trigger and response must be at most 2,000 characters each.");
+      const { changed } = await turso(env, INSERT_TRIGGER, [t, r], true);
+      return slashReply(changed ? "Trigger saved." : "That trigger already exists.");
+    }
+    if (name === "baller-remove") {
+      const { changed } = await turso(env, "DELETE FROM ballers WHERE cause = ?", [get("trigger").trim()], true);
+      return slashReply(changed ? "Trigger removed." : "Trigger not found.");
     }
     if (name === "baller-show") {
-      const rows = await q("SELECT cause, effect FROM ballers ORDER BY rowid");
+      const { rows } = await turso(env, "SELECT cause, effect FROM ballers ORDER BY rowid LIMIT 15");
       if (!rows.length) return slashReply("no triggers yet");
-      return slashReply(rows.slice(0, 15).map(([c, e]) => c + " → " + String(e).slice(0, 80)).join("\n"));
-    }
-    if (name === "baller-say") {
-      return slashReply(get("text") || "(empty)");
+      return slashReply(rows.map(([c, e]) => c.slice(0, 40) + " → " + e.slice(0, 75)).join("\n"));
     }
     if (name === "link-add") {
-      const nm = get("name");
+      const nm = get("name").trim();
       const sh = get("short");
-      const u = get("url");
-      if (!nm || !sh || !u) return slashReply("need name + short + url");
-      const dup = await q("SELECT backlink FROM links WHERE backlink = ?", [sh]);
-      if (dup.length) return slashReply("short already exists");
-      await q("INSERT INTO links (backlink, name, link, date) VALUES (?, ?, ?, ?)", [sh, nm, u, new Date().toISOString()]);
-      return slashReply("live: https://go.squeakyfiddlepro.me/" + sh);
+      const u = linkTarget(get("url"));
+      if (!nm || nm.length > 100) return slashReply("Use a name between 1 and 100 characters.");
+      if (!validNewSlug(sh)) return slashReply("Use 1 to 64 letters, digits, hyphens, or underscores. `health` and `interactions` are reserved.");
+      if (!u) return slashReply("Use a full HTTP(S) destination URL without credentials.");
+      const { changed } = await turso(env, INSERT_LINK, [sh, nm, u, new Date().toISOString()], true);
+      return slashReply(changed ? "live: " + domain + "/" + sh : "short already exists");
+    }
+    if (name === "link-edit") {
+      const field = get("field");
+      if (field !== "name" && field !== "link") return slashReply("Choose a field: name or destination.");
+      const value = field === "link" ? linkTarget(get("value")) : get("value").trim();
+      if (!value || (field === "name" && value.length > 100)) return slashReply(field === "link"
+        ? "Use a full HTTP(S) destination URL without credentials." : "Use a name between 1 and 100 characters.");
+      const { changed } = await turso(env, "UPDATE links SET " + field + " = ? WHERE backlink = ?", [value, get("short")], true);
+      return slashReply(changed ? "Short link updated." : "Short link not found.");
+    }
+    if (name === "link-remove") {
+      const { changed } = await turso(env, "DELETE FROM links WHERE backlink = ?", [get("short")], true);
+      return slashReply(changed ? "Short link removed." : "Short link not found.");
     }
     if (name === "link-show") {
-      const rows = await q("SELECT name, backlink, link FROM links ORDER BY rowid");
+      const { rows } = await turso(env, "SELECT name, backlink FROM links ORDER BY rowid LIMIT 15");
       if (!rows.length) return slashReply("no links yet");
-      return slashReply(rows.slice(0, 15).map(([n, s, l]) => n + " - https://go.squeakyfiddlepro.me/" + s).join("\n"));
+      return slashReply(rows.map(([n, s]) => n.slice(0, 40) + " - " + domain + "/" + encodeURIComponent(s)).join("\n"));
     }
   }
   return slashReply("unknown command - /help");
@@ -1231,74 +1178,119 @@ async function handleSlash(interaction, env) {
 
 export { handleSlash };
 
+async function readInteraction(request) {
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > MAX_INTERACTION_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return body;
+}
+
+async function safelyHandleSlash(interaction, env) {
+  try {
+    return await handleSlash(interaction, env);
+  } catch {
+    console.error("Slash command failed:", interaction.data?.name);
+    return slashReply(DATABASE_COMMANDS.has(interaction.data?.name) ? "Short-link/trigger database unavailable; try again later." : "Command failed; try again later.", true);
+  }
+}
+
+async function finishDatabaseCommand(interaction, env) {
+  try {
+    const { data } = await (await safelyHandleSlash(interaction, env)).json();
+    const { content, allowed_mentions } = data;
+    const app = encodeURIComponent(interaction.application_id);
+    const token = encodeURIComponent(interaction.token);
+    const url = `https://discord.com/api/v10/webhooks/${app}/${token}/messages/@original`;
+    const update = () => fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, allowed_mentions }),
+      signal: AbortSignal.timeout(8000),
+    });
+    let res = await update();
+    if (res.status === 404) {
+      await res.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      res = await update();
+    }
+    if (!res.ok) console.error("Discord could not deliver the deferred reply:", res.status);
+  } catch {
+    console.error("Discord deferred reply failed");
+  }
+}
+
 export default {
-  async fetch(request, env) {
-    const proto = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-    if (proto === "http") {
-      const url = new URL(request.url);
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.protocol === "http:") {
       url.protocol = "https:";
       return Response.redirect(url.toString(), 301);
     }
-    if (request.method === "POST") {
-      const url = new URL(request.url);
-      if (url.pathname === "/interactions") {
-        const body = await request.text();
-        if (!(await verifyDiscord(request, body))) {
-          return new Response("bad signature", { status: 401 });
-        }
-        const interaction = JSON.parse(body);
-        if (interaction.type === 1) {
-          return Response.json({ type: 1 });
-        }
-        if (interaction.type === 2) {
-          const who = (interaction.member && interaction.member.user && interaction.member.user.id) ||
-            (interaction.user && interaction.user.id) || "";
-          if (ALLOWED_USERS.size && !ALLOWED_USERS.has(who)) {
-            return Response.json({ type: 4, data: { content: "not on the allowlist", flags: 64 } });
-          }
-          return handleSlash(interaction, env);
-        }
-        return new Response("unhandled", { status: 400 });
-      }
-    }
-    const url = new URL(request.url);
-    if (url.pathname === "/health") {
-      return new Response("ok");
-    }
-    const slug = decodeURIComponent(url.pathname.replace(/^\/+|\/+$/g, ""));
-    if (!slug || slug.includes("/")) {
-      return new Response(LANDING, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-    }
-    let target = null;
+    let slug;
     try {
-      const res = await fetch("https://" + DB_HOST + "/v2/pipeline", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + env.TURSO_AUTH_TOKEN,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              type: "execute",
-              stmt: {
-                sql: "SELECT link FROM links WHERE backlink = ?",
-                args: [{ type: "text", value: slug }],
-              },
-            },
-          ],
-        }),
-      });
-      const j = await res.json();
-      const rows = (((j.results || [])[0] || {}).response || {}).result || {};
-      const cell = rows.rows && rows.rows.length ? rows.rows[0][0] : null;
-      if (cell) {
-        target = typeof cell === "object" ? cell.value : cell;
-      }
-    } catch {}
-    if (target) {
-      return Response.redirect(target, 302);
+      slug = decodeURIComponent(url.pathname.replace(/^\/+|\/+$/g, ""));
+    } catch {
+      return new Response("invalid path", { status: 400 });
     }
-    return new Response("unknown short link", { status: 404 });
+    if (slug.toLowerCase() === "interactions") {
+      if (url.pathname !== "/interactions" || request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      const sig = request.headers.get("X-Signature-Ed25519");
+      const ts = request.headers.get("X-Signature-Timestamp");
+      if (!/^[a-f\d]{128}$/i.test(sig || "") || !/^\d{10,12}$/.test(ts || "") || Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
+        return new Response("bad signature", { status: 401 });
+      }
+      const body = await readInteraction(request);
+      if (!body) return new Response("interaction too large", { status: 413 });
+      if (!(await verifyDiscord(sig, ts, body, env.DISCORD_PUBLIC_KEY))) return new Response("bad signature", { status: 401 });
+      let interaction;
+      try {
+        interaction = JSON.parse(new TextDecoder().decode(body));
+      } catch {
+        return new Response("invalid interaction", { status: 400 });
+      }
+      if (interaction?.type === 1) return Response.json({ type: 1 });
+      if (interaction?.type !== 2) return new Response("unhandled", { status: 400 });
+      const who = interaction.member?.user?.id || interaction.user?.id;
+      if (!who || !(env.ALLOWED_USERS || "").split(",").some((id) => id.trim() === who)) {
+        return slashReply("not on the allowlist", true);
+      }
+      if (DATABASE_COMMANDS.has(interaction.data?.name)) {
+        ctx.waitUntil(finishDatabaseCommand(interaction, env));
+        return Response.json({ type: 5, data: { flags: 64 } });
+      }
+      return safelyHandleSlash(interaction, env);
+    }
+    const head = request.method === "HEAD";
+    if (!head && request.method !== "GET") return new Response("method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+    if (slug.toLowerCase() === "health") return new Response(head ? null : "ok");
+    if (!slug) return new Response(head ? null : LANDING, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    if (slug.includes("/")) return new Response(head ? null : "unknown short link", { status: 404 });
+    try {
+      const { rows } = await turso(env, LOOKUP_LINK, [slug]);
+      const target = linkTarget(rows[0]?.[0]);
+      if (target) return Response.redirect(target, 302);
+      return new Response(head ? null : "unknown short link", { status: 404 });
+    } catch {
+      return new Response(head ? null : "short-link database unavailable", { status: 503 });
+    }
   },
 };

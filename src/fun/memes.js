@@ -2,6 +2,7 @@ const path = require("node:path");
 const config = require("../config");
 const { db } = require("../db");
 const { sendPaged } = require("./pager");
+const { INSERT_TRIGGER } = require("../shortlinks");
 
 const AUDIO_FILE = path.join(__dirname, "..", "..", "assets", "heehee.ogg");
 
@@ -25,12 +26,16 @@ module.exports = async function memes(client, message) {
   const isRemove = lower === p + "remove" || lower.startsWith(p + "remove ");
   const isReset = lower === p + "reset" || lower.startsWith(p + "reset ");
   const isSay = lower === p + "say" || lower.startsWith(p + "say ");
+  if ((isAdd || isRemove || isReset || isSay) && !config.allowedUsers.includes(message.author.id)) {
+    await message.channel.send("Only a configured admin can manage triggers or speak as the bot.");
+    return true;
+  }
 
   if (isShow) {
-    const all = await db.execute("SELECT cause, effect FROM ballers ORDER BY rowid").catch(() => ({ rows: [] }));
+    const all = await db.execute("SELECT cause, effect FROM ballers ORDER BY rowid");
     if (!all.rows.length) {
       await send(client, message.channelId, "no ballers found");
-      return;
+      return true;
     }
     await sendPaged(
       message,
@@ -70,41 +75,33 @@ module.exports = async function memes(client, message) {
 
   if (isAdd) {
     const q = quotedParts(text);
-    if (q.length < 2) {
+    if (q.length !== 2 || q.some((part) => !part)) {
       await send(client, message.channelId, 'Usage: `ts add "trigger" "response"`');
-      return;
+      return true;
     }
-    const dup = await db
-      .execute({ sql: "SELECT cause FROM ballers WHERE cause = ?", args: [q[0]] })
-      .catch(() => ({ rows: [] }));
-    if (!dup.rows.length) {
-      await db
-        .execute({ sql: "INSERT INTO ballers (cause, effect) VALUES (?, ?)", args: [q[0], q[1]] })
-        .catch(() => {});
-    }
-    const sent = await message.channel.send(q[0] + "\n" + q[1]).catch(() => null);
-    if (sent) setTimeout(() => sent.delete().catch(() => {}), 1000);
+    const result = await db.execute({ sql: INSERT_TRIGGER, args: q });
+    await message.channel.send(result.rowsAffected ? "Trigger saved." : "That trigger already exists.");
     return true;
   }
   if (isRemove) {
     const q = quotedParts(text);
     if (!q.length) {
       await send(client, message.channelId, 'Usage: `ts remove "trigger"`');
-      return;
+      return true;
     }
-    await db.execute({ sql: "DELETE FROM ballers WHERE cause = ?", args: [q[0]] }).catch(() => {});
-    await send(client, message.channelId, '"' + q[0] + '" has been slayed by ' + message.author.username + ".");
+    const result = await db.execute({ sql: "DELETE FROM ballers WHERE cause = ?", args: [q[0]] });
+    await message.channel.send(result.rowsAffected ? "Trigger removed." : "Trigger not found.");
     return true;
   }
   if (isReset) {
-    await db.execute("DELETE FROM ballers").catch(() => {});
+    await db.execute("DELETE FROM ballers");
     await send(client, message.channelId, "All meme triggers wiped by " + message.author.username + ".");
     return true;
   }
   if (isSay) {
     const say = text.slice((config.commandPrefix + "say").length).trim();
-    if (say) await send(client, message.channelId, say);
-    await message.delete().catch(() => {});
+    if (!say) await message.channel.send("Usage: `ts say <text>`");
+    else await message.channel.send(say);
     return true;
   }
 

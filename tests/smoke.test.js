@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll } from "bun:test";
 
 process.env.TURSO_URL = "file:/tmp/syndication-test.db";
+process.env.DICT = require("node:path").join(__dirname, "fixtures", "sub-words.txt");
+require("../src/config.js").dict = process.env.DICT;
 
 const { initDb } = require("../src/db.js");
 const { glow } = require("../src/fun/glow.js");
@@ -78,9 +80,11 @@ describe("solvers", () => {
     await solve({}, msg("ts fermat 10403"));
     expect(lastText()).toContain("101");
   });
-  it("substitution top hits", async () => {
-    await solve({}, msg("ts sub " + "gsv jfrxp yildm ulc".replace(/[a-z]/g, (c) => c)));
-    expect(lastText().length).toBeGreaterThan(0);
+  it("substitution solves with the fixture dictionary", async () => {
+    const key = "qwertyuiopasdfghjklzxcvbnm";
+    const ct = "meet me at the old bridge after dark".replace(/[a-z]/g, (c) => key[c.charCodeAt(0) - 97]);
+    await solve({}, msg("ts sub " + ct));
+    expect(lastText().split("\n")[0]).toBe("1. meet me at the old bridge after dark");
   });
 });
 
@@ -131,8 +135,9 @@ describe("hunt", () => {
     await hunt({}, msg("ts bf ++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."));
     expect(lastText().trim()).toBe("Hello World!");
   });
-  it("jwt none forge", async () => {
-    await hunt({}, msg('ts jwt none {"user":"admin"}'));
-    expect(lastText().split(".").length).toBe(3);
+  it("jwt decode is inspection only", async () => {
+    const tok = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+    await codecs({}, msg("ts jwt " + tok));
+    expect(lastText()).toBe('header: {"alg":"HS256","typ":"JWT"}\npayload: {"sub":"1234567890"}');
   });
 });

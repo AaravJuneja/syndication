@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const zlib = require("node:zlib");
 const config = require("../config");
+const { baconEncode, baconDecode } = require("./bacon.js");
 
 function cut(s) {
   s = String(s);
@@ -92,7 +93,7 @@ function loadWords() {
   for (const p of paths) {
     try {
       const words = fs.readFileSync(p, "utf8").split("\n").map((w) => w.trim().toLowerCase()).filter((w) => /^[a-z]{2,15}$/.test(w));
-      if (words.length > 1000) {
+      if (words.length > (p === config.dict && process.env.DICT ? 0 : 1000)) {
         dictWords = words;
         return dictWords;
       }
@@ -352,33 +353,6 @@ function affineBrute(text) {
   }
   out.sort((x, y) => y.rank - x.rank);
   return out.slice(0, 5);
-}
-
-function baconDecode(s) {
-  const t = s.toLowerCase().replace(/[^ab01]/g, "").replace(/0/g, "a").replace(/1/g, "b");
-  if (!t || t.length % 5 !== 0) return null;
-  const alpha = "abcdefghiklmnopqrstuvwxyz";
-  let out = "";
-  for (let i = 0; i < t.length; i += 5) {
-    const v = parseInt(t.slice(i, i + 5).replace(/a/g, "0").replace(/b/g, "1"), 2);
-    out += v < 24 ? alpha[v] : "?";
-  }
-  return out;
-}
-
-function baconEncode(s) {
-  const alpha = "abcdefghiklmnopqrstuvwxyz";
-  let out = "";
-  for (const c of s.toLowerCase()) {
-    let idx = alpha.indexOf(c === "j" ? "i" : c);
-    if (c === " ") {
-      out += " ";
-      continue;
-    }
-    if (idx < 0) return null;
-    out += idx.toString(2).padStart(5, "0").replace(/0/g, "a").replace(/1/g, "b") + " ";
-  }
-  return out.trim();
 }
 
 function a1z26(s) {
@@ -807,15 +781,18 @@ module.exports = async function solve(client, message) {
     return true;
   }
   if (lower.startsWith(p + "bacon ")) {
-    const [mode, ...rest] = arg(p + "bacon ").split(/\s+/);
-    const text = rest.join(" ");
+    const parts = arg(p + "bacon ").split(/\s+/);
+    const vTok = parts.find((t) => /^v=(24|26)$/i.test(t));
+    const variant = vTok ? Number(vTok.slice(2)) : 24;
+    const rest = parts.filter((t) => t !== vTok);
+    const mode = (rest[0] || "").toLowerCase();
     if (mode === "encode") {
-      const out = baconEncode(text);
-      await message.channel.send(out === null ? "Letters and spaces only." : cut(out));
+      const out = baconEncode(rest.slice(1).join(" "), { variant });
+      await message.channel.send(out === null ? "Letters and spaces only." : cut(out || "(empty)"));
       return true;
     }
-    const out = baconDecode(mode === "decode" ? text : mode + " " + text);
-    await message.channel.send(out === null ? "Need groups of 5 (A/B or 0/1)." : cut(out));
+    const out = baconDecode((mode === "decode" ? rest.slice(1) : rest).join(" "), { variant });
+    await message.channel.send(out === null ? "Need groups of 5 (A/B or 0/1), `/` between words. Default table is 24 letters (I=J, U=V), add v=26 for the 26 letter table." : cut(out));
     return true;
   }
   if (lower.startsWith(p + "a1z26 ")) {

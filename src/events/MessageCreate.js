@@ -17,7 +17,7 @@ const agent = require("../fun/agent");
 module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
-    if (message.author?.bot) return;
+    if (!message.author || message.author.bot || message.webhookId || !message.channel?.isSendable()) return;
     const config = require("../config");
     if (config.allowedUsers.length && !config.allowedUsers.includes(message.author.id)) return;
     try {
@@ -48,19 +48,25 @@ module.exports = {
     for (const run of runs) {
       try {
         if (await run()) return;
-      } catch (err) {
-        console.error(err);
+      } catch {
+        await m.channel.send("That command failed; check the bot logs and try again.").catch(() => {});
+        console.error("A prefix command failed");
+        return;
       }
     }
     try {
       if (await memes(m.client, m)) return;
-    } catch (err) {
-      console.error(err);
+    } catch {
+      console.error("A trigger command failed");
+      if (message.content.toLowerCase().startsWith(config.commandPrefix.toLowerCase())) {
+        await m.channel.send("The trigger command failed; try again later.").catch(() => {});
+      }
+      return;
     }
     const prefix = require("../config").commandPrefix;
     if (message.content.toLowerCase().startsWith(prefix.toLowerCase())) {
       try {
-        await m.channel.send("unknown command - try `ts help`");
+        await m.channel.send("unknown command - try `" + prefix + "help`");
       } catch {}
     }
   },

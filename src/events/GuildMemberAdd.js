@@ -8,7 +8,10 @@ module.exports = {
     if (!config.welcomeChannelId) return;
     try {
       const channel = await member.guild.channels.fetch(config.welcomeChannelId);
-      if (channel) await channel.send("Welcome <@" + member.id + "> *hee hee*");
+      if (channel?.isSendable()) await channel.send({
+        content: "Welcome <@" + member.id + "> *hee hee*",
+        allowedMentions: { users: [member.id] },
+      });
     } catch (err) {
       console.error(err);
     }
