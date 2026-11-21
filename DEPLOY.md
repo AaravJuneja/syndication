@@ -31,6 +31,8 @@ systemctl --user restart syndication-gateway.service
 
 ## Cloudflare Worker
 
+Install Node.js 22.12 or newer for Wrangler.
+
 Use `https://go.squeakyfiddlepro.me/interactions` as Discord's interactions
 endpoint. The deploy script reads `TURSO_URL`, `DOMAIN`, and `ALLOWED_USERS`
 from `.env` and gets the signing public key from Discord. Set
