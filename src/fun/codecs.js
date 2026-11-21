@@ -803,12 +803,13 @@ module.exports = async function codecs(client, message) {
     return true;
   }
   if (lower.startsWith(p + "auto ")) {
-    const parts = arg(p + "auto ").split(/\s+/);
-    const cribBit = parts.find((t) => t.toLowerCase().startsWith("crib="));
-    const depthBit = parts.find((t) => /^depth=\d+$/i.test(t));
-    const crib = cribBit ? cribBit.slice(5) : "";
-    const depth = depthBit ? Number(depthBit.slice(6)) : undefined;
-    const text = parts.filter((t) => t !== cribBit && t !== depthBit).join(" ");
+    let crib;
+    let depth;
+    const text = arg(p + "auto ").replace(/(?<!\S)(crib=\S*|depth=\d+)(?!\S)/gi, (option) => {
+      if (option.toLowerCase().startsWith("crib=")) crib ??= option.slice(5);
+      else depth ??= Number(option.slice(6));
+      return "";
+    });
     await auto(message, text, crib, depth);
     return true;
   }

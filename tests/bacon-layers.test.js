@@ -4,6 +4,7 @@ const { baconEncode, baconDecode } = require("../src/fun/bacon.js");
 const { solveLayers, LAYER_LIMITS } = require("../src/fun/layers.js");
 const solve = require("../src/fun/solve.js");
 const codecs = require("../src/fun/codecs.js");
+const bases = require("../src/fun/bases.js");
 
 const sent = [];
 const msg = (content) => ({ content, channel: { send: async (c) => sent.push(c) } });
@@ -94,6 +95,16 @@ describe("layered auto", () => {
     expect(lastText()).toContain("searched");
     await codecs({}, msg("ts auto zzzz qqqq"));
     expect(lastText()).toContain("Nothing readable");
+  });
+
+  it("preserves multiline UUencoded input with options", async () => {
+    const plaintext = P + " and bring the map with you";
+    await bases({}, msg("ts uu encode " + plaintext));
+    const encoded = lastText();
+    expect(encoded).toContain("\n");
+    await codecs({}, msg("ts auto depth=2 begin 644 puzzle.txt\n" + encoded + "\nend crib=bridge"));
+    expect(lastText()).toContain("[uu]");
+    expect(lastText()).toContain(plaintext);
   });
 
   it("ts what and ts identify share the engine", async () => {

@@ -919,12 +919,11 @@ function identify(text, opts) {
   const jwt = s.match(/^([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]{8,})\.([A-Za-z0-9_-]*)$/);
   if (jwt) {
     const header = utf8(base64Bytes(jwt[1]));
-    const payload = utf8(base64Bytes(jwt[2]));
     let alg = null;
     try {
-      alg = header ? JSON.parse(header).alg : null;
+      alg = header ? JSON.parse(header)?.alg : null;
     } catch {}
-    if (alg !== null && alg !== undefined) {
+    if (typeof alg === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(alg)) {
       add({
         id: "jwt",
         name: "JSON Web Token",
@@ -932,8 +931,6 @@ function identify(text, opts) {
         score: 96,
         evidence: ["three base64url segments", "header is JSON with alg " + alg],
         caveats: ["signature is not verified here"],
-        preview: payload ? clip(payload, 140) : undefined,
-        next: "ts jwt <token>",
       });
     }
   }

@@ -113,11 +113,12 @@ describe("identify ranks with evidence", () => {
     expect(c.name).toContain("KEY");
   });
 
-  it("decodes JWT header and payload without verifying", () => {
+  it("identifies JWTs without revealing their claims", () => {
     const tok = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
     const c = top(tok);
     expect(c.id).toBe("jwt");
-    expect(c.preview).toContain("1234567890");
+    expect(c.preview).toBeUndefined();
+    expect(c.evidence.join(" ")).toContain("HS256");
     expect(c.caveats.join(" ")).toContain("not verified");
   });
 
