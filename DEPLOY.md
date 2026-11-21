@@ -1,64 +1,48 @@
-# Hosting the bot on HeavenCloud (free tier)
+# Deploy Syndication
 
-Local box stays the fallback until this is live. Do both, then stop local.
+Cloudflare serves `go.squeakyfiddlepro.me` and Discord slash commands. A local
+Bun process handles `ts` commands. Both use Turso.
 
-## 1. Claim the slot
+## Discord gateway
 
-1. Join their Discord, claim a free server at control.heavencloud.in
-   (715 MB RAM, no sleep, renew with 1 click every 7 days).
-2. Pick the Bun egg if offered, else Node 20+.
+1. Run `bun install --frozen-lockfile`.
+2. Copy `.env.example` to `.env`. Set `TOKEN`, `TURSO_URL`, `TURSO_AUTH_TOKEN`,
+   and comma-separated `ALLOWED_USERS`. Run `chmod 600 .env`.
+3. Enable Message Content Intent in Discord. For welcomes, also set
+   `WELCOME_CHANNEL_ID` and enable Server Members Intent.
 
-## 2. Get the code on there
-
-Option A (git): pull this repo in their file manager / console.
-Option B (upload): zip everything EXCEPT `node_modules` and `.env`.
-
-Then install deps in their console:
+Run `RUN_MODE=gateway bun start` manually, or install the Linux user service:
 
 ```sh
-bun install
+unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+install -D -m 0644 deploy/systemd/syndication-gateway.service "$unit_dir/syndication-gateway.service"
+systemctl --user daemon-reload
+systemctl --user enable --now syndication-gateway.service
 ```
 
-## 3. Environment variables (panel → Startup / Variables)
-
-| Var | Value |
-|---|---|
-| `TOKEN` | Discord bot token (DM me, never commit it) |
-| `TURSO_URL` | `libsql://syndication-juneja.aws-ap-south-1.turso.io` |
-| `TURSO_AUTH_TOKEN` | DM me, never commit it |
-| `PORT` | `5000` (unused for Discord, harmless) |
-| `DOMAIN` | `https://go.squeakyfiddlepro.me` |
-| `COMMAND_PREFIX` | `ts` |
-| `WORDLIST` | leave empty (rockyou stays local-only) |
-| `DICT` | leave empty (uses panel system dict if present) |
-| `GITHUB_TOKEN` | optional classic PAT for 5000/hr GitHub quota |
-| `WELCOME_CHANNEL_ID` | optional |
-| `WEBHOOK` | optional |
-
-## 4. Start command
+Adjust the unit if your repo or Bun paths differ. With systemd linger enabled,
+the service starts at boot. Prefix commands go offline when the host sleeps or
+shuts down. Run one gateway per bot token.
 
 ```sh
-bun src/index.js
+journalctl --user -u syndication-gateway.service -n 30 --no-pager
+systemctl --user restart syndication-gateway.service
 ```
 
-## 5. Verify in Discord
+## Cloudflare Worker
 
-- `ts help` → embed menu
-- `ts doctor` → capability report; expect on panel:
-  - runtime, discord ping, turso: ok
-  - wordlist: missing (fine - `ts crack` needs WORDLIST, rockyou is 140MB)
-  - ffmpeg/python3/cv2/exiftool/steghide: whatever panel has;
-    missing ones degrade gracefully with honest messages
+Use `https://go.squeakyfiddlepro.me/interactions` as Discord's interactions
+endpoint. The deploy script reads `TURSO_URL`, `DOMAIN`, and `ALLOWED_USERS`
+from `.env` and gets the signing public key from Discord. Set
+`TURSO_AUTH_TOKEN` as a Worker secret if it is not already configured.
 
-## 6. Cut over
+```sh
+bun run wrangler login
+bun run worker:deploy
+bun run slash:register --global
+```
 
-Tell me when `ts doctor` is green on the panel - I stop the local
-systemd service so two instances never fight over the gateway.
+Run `bun run db:init` for a new database. For local Worker testing, put test
+bindings in `.dev.vars` and run `bun run worker:dev` (HTTPS on port 8787).
 
-## Limits to know
-
-- No backups on free tier: code is in git, data in Turso, nothing to lose.
-- 7-day renewal click or it suspends (2-day grace, then deleted).
-- No inbound ports needed: bot only makes outbound connections
-  (Discord gateway, Turso, public HTTPS APIs). Short links run on the
-  Cloudflare Worker, not here.
+Verify `GET /health`, `/what` with `SGVsbG8=`, and `ts what SGVsbG8=`.
